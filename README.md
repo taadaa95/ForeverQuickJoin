@@ -6,21 +6,21 @@
 
 ### Find Groups
 
-- Search Blizzard's Group Finder directly by category and activity; optionally **Show all level ranges**.
+- Search Blizzard's Group Finder directly by category and activity.
 - See each group's activity, playstyle, size, and Blizzard tank/healer/DPS icons.
 - Expand a group to inspect available member names, classes, levels, roles, specializations, and areas. Right-click a named member to prepare a manual `/who` query when their area is unknown.
-- Sort by member count and filter by available party slots and current roles.
-- Use **Advanced Filters** to exclude classes or playstyles, restrict group size, and show only whisperable or described listings.
+- Keep the large **Party detected** panel visible in both Find Groups and List Group, with an obvious **Review / Fix Roles** or **Change Roles** button.
+- Use **Advanced Filters** for *all* finder options: Show all level ranges, sorting by member count, Space for Tank/Healer/DPS, Already has Tank/Healer, class and playstyle exclusions, size, description, and whisperability.
 - Click **Whisper to Join** to contact a group leader using your saved message.
 
-### Party Roles (new in v0.6.8)
+### Party Roles
 
-A compact **Party detected** indicator appears in the top bar of **both** Find Groups and List Group. It shows the current Tank / Healer / DPS / Unknown counts, including your own character. A **Correct?** button appears when roles need review; otherwise, **Change** opens the editor.
+A larger **Party detected** panel occupies the area below Search in **both** QuickJoin tabs. It displays the Tank / Healer / DPS counts using large Blizzard role icons, plus any unassigned members. Select **Review / Fix Roles** when QuickJoin flags uncertain assignments, or **Change Roles** at any time.
 
 - QuickJoin detects party and raid members and reads Blizzard-assigned roles, names, classes, and levels.
 - DPS assignments for multi-role classes (such as a Priest) are **flagged for review**, not assumed to be correct. An unavailable role is **Unknown**, not guessed from class.
-- In **Party Role Manager**, choose **Tank**, **Healer**, **DPS**, or **Unknown** for each member. Use **Confirm shown roles** if the detected roles are correct, or **Auto** / **Reset to WoW** to discard manual corrections.
-- Corrections immediately update the role counts and the `{role}` / `{party}` whisper placeholders. If a group whisper contains uncertain roles, QuickJoin opens the manager before sending. **Send anyway once** allows the next whisper without confirmation.
+- In **Party Role Manager**, choose **Tank**, **Healer**, or **DPS** for each member. A large icon beside the character reflects the chosen role. **Confirm detected roles** affirms known assignments; **Auto** or **Reset to WoW** discards overrides. Unknown roles must be assigned a valid role before confirmation.
+- Corrections immediately update the role counts and the `{role}` / `{party}` whisper placeholders. QuickJoin requires uncertain roles to be reviewed before sending a group-composition whisper; the one-time bypass has been removed.
 - Corrections are **local to your current group session**. They are cleared when the group disbands or a member leaves, and flagged for review if Blizzard's assignment changes. They do **not** edit other players' roles in WoW or require other players to install the addon.
 - Open the manager directly with `/qj roles` or `/qj party`.
 
