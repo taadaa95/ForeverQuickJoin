@@ -1,4 +1,4 @@
-# Forever QuickJoin v0.6.1
+# Forever QuickJoin v0.6.2
 
 A World of Warcraft **Forever** (1.60.1, Interface `16001`) addon for finding groups, managing listings using Blizzard’s secure listing tab, and handling incoming recruitment whispers in a dedicated role-sorted inbox.
 
@@ -11,7 +11,9 @@ A World of Warcraft **Forever** (1.60.1, Interface `16001`) addon for finding gr
 
 ## Find Groups
 
-Unchanged from v0.5.2: select a category/activity and click **Search**, sort by group size, filter by estimated role vacancies or groups already containing a tank/healer, inspect current group roles, and send customizable one-click whispers. `/qj reset` restores the original solo/group-aware template.
+Select a category/activity and click **Search**, sort by group size, filter by estimated role vacancies or groups already containing a tank/healer, inspect current group roles, and send customizable one-click whispers. `/qj reset` restores the original solo/group-aware template.
+
+Each search result now shows its **Playstyle** beneath the activity name: **Learning**, **Relaxed**, **Competitive**, or **Carry Offered**. This comes from `C_LFGList.GetSearchResultInfo().generalPlaystyle`; QuickJoin prefers Blizzard's localized labels. When the client does not expose the value, the row shows **Playstyle: Unavailable** instead of guessing. The playstyle display does not change searching or filtering.
 
 **Preview:** the word `Preview:` now uses the normal UI text color; only the resolved whisper text uses the player's configured Blizzard `WHISPER` chat color.
 
