@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.6.4 -- expandable group member details and retained Find/Host workflows.
+-- Forever QuickJoin 0.6.5 -- expanded-roster fixes and advanced filters.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
@@ -24,6 +24,8 @@ local COOLDOWN = 3
 
 local db, window, categoryDropdown, activityDropdown, searchButton
 local sortDropdown, locationLabel, minimapButton, clearFilterButton, templateResetButton, allLevelsButton
+local advancedButton, advancedPanel, advancedPlaystyleDropdown, advancedMaxMembersDropdown
+local advancedClassButtons, advancedCheckButtons = {}, {}
 local filterButtons = {}
 local statusLabel, pageLabel, messageBox, previewLabel, previewTitleLabel, prevButton, nextButton
 local rows = {}
@@ -40,6 +42,7 @@ local state = {
     page = 1,
     expandedResultID = nil,
     totalInCache = 0,
+    rosterClassCache = {},
     searching = false,
     searchBlocked = false,
     searchAttemptActive = false,
@@ -434,6 +437,94 @@ local function GetCounts(resultID)
     return counts
 end
 
+local CLASS_OPTIONS = {
+    {"WARRIOR", "Warrior"}, {"PALADIN", "Paladin"},
+    {"HUNTER", "Hunter"}, {"ROGUE", "Rogue"},
+    {"PRIEST", "Priest"}, {"SHAMAN", "Shaman"},
+    {"MAGE", "Mage"}, {"WARLOCK", "Warlock"}, {"DRUID", "Druid"},
+    {"DEATHKNIGHT", "Death Knight"}, {"MONK", "Monk"},
+    {"DEMONHUNTER", "Demon Hunter"}, {"EVOKER", "Evoker"},
+}
+local ADVANCED_PLAYSTYLES = {
+    {0, "Any playstyle"}, {1, "Learning"}, {2, "Relaxed"},
+    {3, "Competitive"}, {4, "Carry Offered"},
+}
+local ADVANCED_MAX_MEMBERS = {
+    {0, "Any group size"}, {1, "1 member"}, {2, "2 members"},
+    {3, "3 members"}, {4, "4 members"}, {5, "5 members"},
+    {10, "10 or fewer"}, {20, "20 or fewer"}, {40, "40 or fewer"},
+}
+
+local function MemberClassToken(resultID, index)
+    if not C_LFGList then return nil end
+    if type(C_LFGList.GetSearchResultPlayerInfo) == "function" then
+        local ok, info = pcall(C_LFGList.GetSearchResultPlayerInfo, resultID, index)
+        info = ok and Readable(info) or nil
+        if type(info) == "table" then
+            local token = Readable(info.classFilename)
+            if type(token) == "string" and token ~= "" then return token:upper() end
+        end
+    end
+    if type(C_LFGList.GetSearchResultMemberInfo) == "function" then
+        local ok, _, token = pcall(C_LFGList.GetSearchResultMemberInfo, resultID, index)
+        token = ok and Readable(token) or nil
+        if type(token) == "string" and token ~= "" then return token:upper() end
+    end
+    return nil
+end
+
+-- Reads the actual group composition and caches it only until the next native
+-- result update or search. Class exclusions require a COMPLETE readable roster
+-- unless the user explicitly opts to include groups with unknown members.
+local function RosterClasses(resultID, numMembers)
+    local cached = state.rosterClassCache[resultID]
+    if cached and cached.numMembers == numMembers then return cached end
+    local roster = {numMembers = numMembers, classes = {}, unknown = false}
+    for index = 1, numMembers do
+        local class = MemberClassToken(resultID, index)
+        if class then roster.classes[class] = true else roster.unknown = true end
+    end
+    state.rosterClassCache[resultID] = roster
+    return roster
+end
+
+local function PassesAdvancedFilters(resultID, info)
+    local advanced = db and db.advanced or nil
+    if not advanced then return true end
+    local members = Readable(info.numMembers)
+    if advanced.playstyle and advanced.playstyle ~= 0 then
+        if Readable(info.generalPlaystyle) ~= advanced.playstyle then return false end
+    end
+    if advanced.maxMembers and advanced.maxMembers > 0 then
+        if type(members) ~= "number" or members > advanced.maxMembers then return false end
+    end
+    if advanced.hasNotes then
+        local comment = Readable(info.comment)
+        if type(comment) ~= "string" or comment == "" then return false end
+    end
+    if advanced.whisperable then
+        local leader = Readable(info.leaderName)
+        if type(leader) ~= "string" or leader == ""
+            or Readable(info.hasSelf) ~= false or Readable(info.isDelisted) ~= false then
+            return false
+        end
+    end
+    local excluded = advanced.excludedClasses
+    if type(excluded) ~= "table" then return true end
+    local anyExcluded = false
+    for _, value in pairs(excluded) do
+        if value == true then anyExcluded = true; break end
+    end
+    if not anyExcluded then return true end
+    if type(members) ~= "number" or members < 1 or members > 40 then return false end
+    local roster = RosterClasses(resultID, math.floor(members))
+    for class, excludedFlag in pairs(excluded) do
+        if excludedFlag and roster.classes[class] then return false end
+    end
+    if roster.unknown and not advanced.includeUnknown then return false end
+    return true
+end
+
 local function PassesRoleFilters(resultID, info)
     if not db then return true end
     local filters = db.filters or {}
@@ -470,11 +561,37 @@ local function PassesRoleFilters(resultID, info)
     return true
 end
 
+local function UpdateAdvancedControls()
+    local advanced = db and db.advanced or {}
+    for token, button in pairs(advancedClassButtons) do
+        button:SetChecked(type(advanced.excludedClasses) == "table"
+            and advanced.excludedClasses[token] == true or false)
+    end
+    for field, button in pairs(advancedCheckButtons) do
+        button:SetChecked(advanced[field] == true)
+    end
+    if advancedPlaystyleDropdown then
+        for _, option in ipairs(ADVANCED_PLAYSTYLES) do
+            if option[1] == (advanced.playstyle or 0) then
+                advancedPlaystyleDropdown:OverrideText(option[2]); break
+            end
+        end
+    end
+    if advancedMaxMembersDropdown then
+        for _, option in ipairs(ADVANCED_MAX_MEMBERS) do
+            if option[1] == (advanced.maxMembers or 0) then
+                advancedMaxMembersDropdown:OverrideText(option[2]); break
+            end
+        end
+    end
+end
+
 local function UpdateFilterButtons()
     local filters = db and db.filters or {}
     for key, button in pairs(filterButtons) do
         button:SetChecked(filters[key] == true)
     end
+    UpdateAdvancedControls()
     if sortDropdown then
         local order = db and db.sortOrder or "default"
         local captions = {default = "Sort: Finder order", asc = "Members: fewest", desc = "Members: most"}
@@ -507,7 +624,8 @@ local function RebuildVisibleResults(resetPage)
             end
             if match and removed ~= true
                 and (count == nil or (type(count) == "number" and count >= 1))
-                and PassesRoleFilters(id, info) then
+                and PassesRoleFilters(id, info)
+                and PassesAdvancedFilters(id, info) then
                 table.insert(out, {id=id, count=type(count)=="number" and count or nil, original=index})
             end
         end
@@ -542,6 +660,20 @@ local function RebuildVisibleResults(resetPage)
     end
 end
 
+local function SaveAdvanced(field, value)
+    if not db then return end
+    db.advanced[field] = value
+    UpdateAdvancedControls()
+    RebuildVisibleResults(true)
+end
+
+local function SaveClassExclusion(token, checked)
+    if not db then return end
+    db.advanced.excludedClasses[token] = checked == true or nil
+    UpdateAdvancedControls()
+    RebuildVisibleResults(true)
+end
+
 local function SaveFilter(field, checked)
     if not db then return end
     db.filters[field] = not not checked
@@ -551,6 +683,8 @@ end
 local function ResetFilters()
     if not db then return end
     db.filters = {}
+    db.advanced = {excludedClasses = {}, playstyle = 0, maxMembers = 0}
+    state.rosterClassCache = {}
     UpdateFilterButtons()
     RebuildVisibleResults(true)
 end
@@ -674,9 +808,17 @@ local function PopulateMemberDetails(row, resultID, info)
             local leaderTag = member.isLeader and " |cffffd100(Leader)|r" or ""
             tile.title:SetText(icon .. " " .. SafeMarkup(Truncate(member.name, 22)) .. leaderTag)
             local level = member.level and ("Lv" .. member.level) or "Lv?"
-            local spec = member.specName or "Spec unknown"
+            local spec = member.specName
             local area = member.area or "Area unknown"
-            local desc = level .. " " .. member.className .. " · " .. spec .. " · " .. area
+            -- Some Forever listings use className as a placeholder for specName.
+            -- Do not show "Shaman · Shaman" or "Hunter · Hunter".
+            if spec and spec:lower():match("^%s*(.-)%s*$")
+                == member.className:lower():match("^%s*(.-)%s*$") then
+                spec = nil
+            end
+            local desc = level .. " " .. member.className
+            if spec then desc = desc .. " · " .. spec end
+            desc = desc .. " · " .. area
             tile.subtitle:SetText(SafeMarkup(Truncate(desc, 55)))
             local classColor = type(RAID_CLASS_COLORS) == "table" and member.classFilename
                 and RAID_CLASS_COLORS[member.classFilename] or nil
@@ -764,6 +906,7 @@ local function RefreshResults()
         return
     end
     state.cachedResults = {}
+    state.rosterClassCache = {}
     for _, id in ipairs(ids) do
         if type(Readable(id)) == "number" then
             table.insert(state.cachedResults, id)
@@ -1079,7 +1222,137 @@ local function CreateWindow()
                 function(key) SetSort(key) end, order)
         end
     end)
+    advancedButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+    advancedButton:SetSize(152, 24)
+    advancedButton:SetPoint("TOPLEFT", window, "TOPLEFT", 646, -129)
+    advancedButton:SetText("Advanced Filters >>")
+
+    advancedPanel = CreateFrame("Frame", "ForeverQuickJoinAdvancedFilters", window, "BackdropTemplate")
+    advancedPanel:SetSize(365, 524)
+    advancedPanel:SetFrameStrata("DIALOG")
+    advancedPanel:SetFrameLevel(window:GetFrameLevel() + 15)
+    advancedPanel:SetClampedToScreen(true)
+    advancedPanel:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true, tileSize = 32, edgeSize = 20,
+        insets = {left = 0, right = 0, top = 0, bottom = 0},
+    })
+    advancedPanel:SetBackdropColor(0.035, 0.045, 0.065, 1)
+    advancedPanel:EnableMouse(true)
+    local function PositionAdvancedPanel()
+        advancedPanel:ClearAllPoints()
+        local right = window:GetRight()
+        local left = window:GetLeft()
+        local screenRight = UIParent and UIParent:GetRight()
+        if right and screenRight and screenRight - right >= 380 then
+            advancedPanel:SetPoint("TOPLEFT", window, "TOPRIGHT", 6, -102)
+        elseif left and left >= 380 then
+            advancedPanel:SetPoint("TOPRIGHT", window, "TOPLEFT", -6, -102)
+        else
+            -- Small screens: put the drawer inside QuickJoin, above results.
+            advancedPanel:SetPoint("TOPRIGHT", window, "TOPRIGHT", -11, -211)
+        end
+    end
+    local function ToggleAdvanced(show)
+        if show then
+            PositionAdvancedPanel()
+            advancedPanel:Show()
+            advancedButton:SetText("Advanced Filters <<")
+        else
+            advancedPanel:Hide()
+            advancedButton:SetText("Advanced Filters >>")
+        end
+    end
+    advancedButton:SetScript("OnClick", function() ToggleAdvanced(not advancedPanel:IsShown()) end)
+    window.QuickJoinHideAdvanced = function() ToggleAdvanced(false) end
+    window.QuickJoinRestoreAdvanced = function()
+        if db and db.advancedOpen then ToggleAdvanced(true) end
+    end
+    advancedPanel:SetScript("OnShow", function()
+        if db then db.advancedOpen = true end
+    end)
+    advancedPanel:SetScript("OnHide", function()
+        if db then db.advancedOpen = false end
+    end)
+    MakeLabel(advancedPanel, "ADVANCED FILTERS", "GameFontNormal", 14, -13, 310, 20)
+    local advancedClose = CreateFrame("Button", nil, advancedPanel, "UIPanelCloseButton")
+    advancedClose:SetPoint("TOPRIGHT", advancedPanel, "TOPRIGHT", -1, -2)
+    advancedClose:SetScript("OnClick", function() ToggleAdvanced(false) end)
+    MakeLabel(advancedPanel, "Exclude groups containing these classes:",
+        "GameFontHighlightSmall", 15, -47, 336, 19)
+    local visibleIndex = 0
+    for _, option in ipairs(CLASS_OPTIONS) do
+        local token, english = option[1], option[2]
+        local hasClass = type(CLASS_ICON_TCOORDS) ~= "table"
+            or type(CLASS_ICON_TCOORDS[token]) == "table"
+        if hasClass then
+            local label = type(LOCALIZED_CLASS_NAMES_MALE) == "table"
+                and LOCALIZED_CLASS_NAMES_MALE[token] or english
+            local col = visibleIndex % 2
+            local rowNum = math.floor(visibleIndex / 2)
+            local button = CreateFrame("CheckButton", nil, advancedPanel, "UICheckButtonTemplate")
+            button:SetSize(22, 22)
+            button:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT",
+                15 + col * 169, -70 - rowNum * 27)
+            MakeLabel(button, label, "GameFontHighlightSmall", 24, -2, 138, 21)
+            button:SetScript("OnClick", function(self)
+                SaveClassExclusion(token, self:GetChecked())
+            end)
+            advancedClassButtons[token] = button
+            visibleIndex = visibleIndex + 1
+        end
+    end
+    MakeLabel(advancedPanel,
+        "Class filters require a readable roster. Unknown groups are hidden by default.",
+        "GameFontHighlightSmall", 16, -277, 339, 37)
+    MakeLabel(advancedPanel, "Playstyle:", "GameFontNormalSmall", 16, -325, 90, 21)
+    advancedPlaystyleDropdown = CreateFrame("DropdownButton", nil,
+        advancedPanel, "WowStyle1DropdownTemplate")
+    advancedPlaystyleDropdown:SetWidth(215)
+    advancedPlaystyleDropdown:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT", 128, -320)
+    advancedPlaystyleDropdown:SetupMenu(function(_, root)
+        root:SetTag("MENU_FOREVER_QUICKJOIN_ADVANCED_PLAYSTYLE")
+        for _, option in ipairs(ADVANCED_PLAYSTYLES) do
+            local id, label = option[1], option[2]
+            root:CreateRadio(label,
+                function(key) return db and db.advanced.playstyle == key end,
+                function(key) SaveAdvanced("playstyle", key) end, id)
+        end
+    end)
+    MakeLabel(advancedPanel, "Max members:", "GameFontNormalSmall", 16, -365, 108, 21)
+    advancedMaxMembersDropdown = CreateFrame("DropdownButton", nil,
+        advancedPanel, "WowStyle1DropdownTemplate")
+    advancedMaxMembersDropdown:SetWidth(215)
+    advancedMaxMembersDropdown:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT", 128, -360)
+    advancedMaxMembersDropdown:SetupMenu(function(_, root)
+        root:SetTag("MENU_FOREVER_QUICKJOIN_ADVANCED_SIZE")
+        for _, option in ipairs(ADVANCED_MAX_MEMBERS) do
+            local value, label = option[1], option[2]
+            root:CreateRadio(label,
+                function(key) return db and db.advanced.maxMembers == key end,
+                function(key) SaveAdvanced("maxMembers", key) end, value)
+        end
+    end)
+    local function AdvancedCheck(field, label, y)
+        local button = CreateFrame("CheckButton", nil, advancedPanel, "UICheckButtonTemplate")
+        button:SetSize(22, 22)
+        button:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT", 14, y)
+        MakeLabel(button, label, "GameFontHighlightSmall", 26, -2, 315, 22)
+        button:SetScript("OnClick", function(self) SaveAdvanced(field, self:GetChecked()) end)
+        advancedCheckButtons[field] = button
+    end
+    AdvancedCheck("whisperable", "Only groups I can whisper", -401)
+    AdvancedCheck("hasNotes", "Only groups with descriptions", -431)
+    AdvancedCheck("includeUnknown", "Include groups with unreadable rosters", -461)
+    local clearAdvanced = CreateFrame("Button", nil, advancedPanel, "UIPanelButtonTemplate")
+    clearAdvanced:SetSize(135, 23)
+    clearAdvanced:SetPoint("TOPRIGHT", advancedPanel, "TOPRIGHT", -15, -491)
+    clearAdvanced:SetText("Clear All Filters")
+    clearAdvanced:SetScript("OnClick", ResetFilters)
+    advancedPanel:Hide()
     UpdateFilterButtons()
+    if db and db.advancedOpen then ToggleAdvanced(true) end
 
     MakeLabel(window, "GROUP LISTINGS", "GameFontNormal", 26, -198, 570, 20)
     MakeLabel(window, "LEADER", "GameFontNormalSmall", 36, -214, 160, 16)
@@ -1144,7 +1417,7 @@ local function CreateWindow()
         row.detail:Hide()
         row.whisper = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
         row.whisper:SetSize(117, 24)
-        row.whisper:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+        row.whisper:SetPoint("TOPRIGHT", row, "TOPRIGHT", -6, -5)
         row.whisper:SetText("Whisper to Join")
         row.whisper:SetScript("OnClick", function()
             if row.resultID then SendWhisper(row.resultID) end
@@ -1417,6 +1690,18 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
         if db.templateIsDefault then db.template = DefaultTemplate() end
         if type(db.allLevels) ~= "boolean" then db.allLevels = false end
         if type(db.filters) ~= "table" then db.filters = {} end
+        if type(db.advanced) ~= "table" then db.advanced = {} end
+        if type(db.advanced.excludedClasses) ~= "table" then
+            db.advanced.excludedClasses = {}
+        end
+        if type(db.advanced.playstyle) ~= "number"
+            or db.advanced.playstyle < 0 or db.advanced.playstyle > 4 then
+            db.advanced.playstyle = 0
+        end
+        if type(db.advanced.maxMembers) ~= "number"
+            or db.advanced.maxMembers < 0 or db.advanced.maxMembers > 40 then
+            db.advanced.maxMembers = 0
+        end
         db.filters.hideFull = nil -- Removed in v0.5.1.
         if db.sortOrder ~= "asc" and db.sortOrder ~= "desc" then db.sortOrder = "default" end
         if type(db.minimapAngle) ~= "number" then db.minimapAngle = 225 end
@@ -1424,7 +1709,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
     elseif event == "PLAYER_LOGIN" then
         CreateMinimapButton()
         SyncDefaultForParty()
-        Print("v0.6.4 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        Print("v0.6.5 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
@@ -1456,6 +1741,11 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
     elseif event == "LFG_LIST_SEARCH_FAILED" then
         FinishSearch(true, arg)
     elseif event == "LFG_LIST_SEARCH_RESULT_UPDATED" then
+        if type(Readable(arg)) == "number" then
+            state.rosterClassCache[arg] = nil
+        else
+            state.rosterClassCache = {}
+        end
         if window and window:IsShown() then
             -- Re-evaluate filters after Blizzard updates a member count.
             -- Preserve the page so the list does not jump while browsing.
