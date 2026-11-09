@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.6.0 -- host inbox, listing tools, and whisper-colored message only.
+-- Forever QuickJoin 0.6.2 -- finder playstyle labels, hosting inbox, and whispers.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
@@ -107,6 +107,28 @@ local function ResultActivityName(info)
         return ActivityDisplayName(ids[1]) or "group"
     end
     return state.activityName or "group"
+end
+
+-- Group Finder's generalPlaystyle enum is distinct from its older playstyle
+-- field. Forever 1.60.1 uses 1=Learning, 2=Relaxed, 3=Competitive,
+-- 4=Carry Offered. Prefer Blizzard's localized display strings; the English
+-- fallbacks allow the label to work if the UI helper is not loaded yet.
+local GENERAL_PLAYSTYLE_NAMES = {
+    [1] = "Learning", [2] = "Relaxed", [3] = "Competitive", [4] = "Carry Offered",
+}
+local function ResultPlaystyle(info)
+    local value = Readable(info and info.generalPlaystyle)
+    if type(value) ~= "number" then return "Unavailable" end
+    if value == 0 then return "Not set" end
+    if not GENERAL_PLAYSTYLE_NAMES[value] then return "Unknown" end
+    if type(GetGeneralPlaystyleString) == "function" then
+        local ok, label = pcall(GetGeneralPlaystyleString, value)
+        label = ok and Readable(label) or nil
+        if type(label) == "string" and label ~= "" then return label end
+    end
+    local global = Readable(_G["GROUP_FINDER_GENERAL_PLAYSTYLE" .. value])
+    if type(global) == "string" and global ~= "" then return global end
+    return GENERAL_PLAYSTYLE_NAMES[value]
 end
 
 -- The location token is looked up when constructing the whisper, not cached.
@@ -560,6 +582,7 @@ UpdatePages = function()
             if not ok or not info then
                 row.label:SetText("Expired listing")
                 row.activity:SetText("")
+                row.playstyle:SetText("")
                 row.composition:SetText("")
                 row.whisper:Disable()
             else
@@ -571,6 +594,7 @@ UpdatePages = function()
                 local displayName = type(name) == "string" and name ~= "" and name or "Leader hidden"
                 row.label:SetText(Truncate(displayName, 23))
                 row.activity:SetText(Truncate(activity, 33))
+                row.playstyle:SetText("Playstyle: " .. Truncate(ResultPlaystyle(info), 23))
                 row.composition:SetText(GroupComposition(resultID, info))
                 row.whisper:SetEnabled(type(name) == "string" and name ~= ""
                     and type(members) == "number" and members >= 1 and not removed and own == false)
@@ -912,7 +936,7 @@ local function CreateWindow()
 
     MakeLabel(window, "GROUP LISTINGS", "GameFontNormal", 26, -198, 570, 20)
     MakeLabel(window, "LEADER", "GameFontNormalSmall", 36, -214, 160, 16)
-    MakeLabel(window, "ACTIVITY", "GameFontNormalSmall", 211, -214, 205, 16)
+    MakeLabel(window, "ACTIVITY / PLAYSTYLE", "GameFontNormalSmall", 211, -214, 222, 16)
     MakeLabel(window, "GROUP ROLES", "GameFontNormalSmall", 442, -214, 210, 16)
 
     for i = 1, PAGE_SIZE do
@@ -922,7 +946,10 @@ local function CreateWindow()
         row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
         row:SetBackdropColor(0.10, 0.12, 0.16, 1)
         row.label = MakeLabel(row, "", "GameFontHighlightSmall", 10, -8, 168, 22)
-        row.activity = MakeLabel(row, "", "GameFontHighlightSmall", 187, -8, 225, 22)
+        row.activity = MakeLabel(row, "", "GameFontHighlightSmall", 187, -2, 225, 16)
+        row.playstyle = MakeLabel(row, "", "GameFontHighlightSmall", 187, -18, 225, 14)
+        row.playstyle:SetTextColor(0.72, 0.88, 0.72)
+        row.playstyle:SetWordWrap(false)
         row.composition = MakeLabel(row, "", "GameFontHighlightSmall", 416, -8, 246, 22)
         row.whisper = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
         row.whisper:SetSize(117, 24)
