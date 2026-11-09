@@ -1738,7 +1738,7 @@ local function CreateWindow()
         end)
         row.label = MakeLabel(row, "", "GameFontHighlightSmall", 26, -1, 153, 16)
         -- Keep Sent immediately left of the Whisper button, NOT below the leader.
-        row.sentBadge = MakeLabel(row, "", "GameFontNormalSmall", 599, -8, 44, 22)
+        row.sentBadge = MakeLabel(row, "", "GameFontNormalSmall", 599, -8, 40, 22)
         row.activity = MakeLabel(row, "", "GameFontHighlightSmall", 187, -2, 225, 16)
         row.playstyle = MakeLabel(row, "", "GameFontHighlightSmall", 187, -18, 225, 14)
         row.playstyle:SetTextColor(0.72, 0.88, 0.72)
