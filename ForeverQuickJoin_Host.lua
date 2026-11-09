@@ -408,12 +408,31 @@ local function TryList()
     if not C_LFGList then Status("Group Finder API unavailable.");return end
     local fn = CurrentEntry() and C_LFGList.UpdateListing or C_LFGList.CreateListing
     if type(fn)~="function" then Status("Listing API unavailable."); return end
-    -- The restricted function must run DIRECTLY in this physical click.
+    -- Restricted listing operations must be initiated by this physical click.
+    -- Some clients require the activity's prebuilt title before creation.
     listingAttempt = true
+    if type(C_LFGList.SetEntryTitle) == "function" then
+        local info = type(C_LFGList.GetActivityInfoTable) == "function"
+            and C_LFGList.GetActivityInfoTable(activityID)
+        local groupID = type(info) == "table" and Readable(info.groupFinderActivityGroupID)
+        if type(groupID) == "number" then
+            C_LFGList.SetEntryTitle(activityID, groupID)
+        end
+    end
+    if listingBlocked then
+        listingAttempt = false
+        Status("WoW blocked listing setup. Try Blizzard's Create Group interface.")
+        return
+    end
     local success = fn({activityIDs={activityID}, isAutoAccept=false, isPrivateGroup=false})
     listingAttempt = false
-    if success == false then Status("WoW refused the listing. Check eligibility in Blizzard Group Finder.")
-    else Status("Listing request submitted. Waiting for game confirmation.") end
+    if listingBlocked then
+        Status("WoW blocked the listing. Use Blizzard's Create Group interface.")
+    elseif success == false then
+        Status("WoW refused the listing. Check eligibility in Blizzard Group Finder.")
+    else
+        Status("Listing request submitted. Waiting for game confirmation.")
+    end
     UpdateListingUI()
 end
 local function TryDelist()
