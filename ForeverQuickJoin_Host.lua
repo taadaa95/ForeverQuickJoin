@@ -435,6 +435,7 @@ function Host.Attach(parent)
         if findTab then findTab:Disable();hostTab:Enable() end
     end)
     hostTab = Button(window,"List Group",628,16,132,25,function()
+        if window.QuickJoinHideAdvanced then window.QuickJoinHideAdvanced() end
         panel:Show()
         findTab:Enable();hostTab:Disable()
         UpdateListingUI()
@@ -550,6 +551,7 @@ end
 function Host.OpenList()
     if not window then return end
     window:Show()
+    if window.QuickJoinHideAdvanced then window.QuickJoinHideAdvanced() end
     panel:Show()
     findTab:Enable();hostTab:Disable()
     UpdateListingUI()
