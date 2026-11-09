@@ -16,7 +16,7 @@
 
 ### My Applications & reply tracking
 
-The **Applications** tab (or `/qj apps`) shows the groups you've contacted through QuickJoin and your outgoing messages. Replies from a matching leader are attached to that conversation, and an unread counter appears on the Applications tab. Open a conversation to mark its replies read, or click **Reply to leader** to prepare a whisper in Blizzard chat (press Enter yourself to send). Follow-up whispers to the same active listing stay in the same thread.
+The **Applications** tab shows the groups you've contacted through QuickJoin and your outgoing messages. Replies from a matching leader are attached to that conversation, and an unread counter appears on the Applications tab. Open a conversation to mark its replies read, or click **Reply to leader** to prepare a whisper in Blizzard chat (press Enter yourself to send). Follow-up whispers to the same active listing stay in the same thread.
 
 ### List Group / Applicant Inbox
 
