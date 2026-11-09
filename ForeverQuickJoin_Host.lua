@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.6.1 - native Blizzard listing handoff and applicant inbox.
+-- Forever QuickJoin 0.6.9 - hosting inbox with space for the party-role status.
 -- Whisper history is session-only; no private message contents go to SavedVariables.
 local addonName = ...
 local Host = {}
@@ -456,26 +456,26 @@ function Host.Attach(parent)
     -- QuickJoin keeps its full applicant inbox and handles whispers/invites.
     listingButton=Button(panel,"Open Blizzard Listing",15,43,211,27,OpenNativeListing)
     listingStatusLabel=Label(panel,"No active listing",235,45,530,26,"GameFontHighlightSmall")
-    statusLabel=Label(panel,"Create, edit or delist in Blizzard; manage whispers and applicants here.",17,78,780,24)
+    statusLabel=Label(panel,"Create, edit or delist in Blizzard; manage whispers and applicants here.",17,145,780,24)
     captureToggle=CreateFrame("CheckButton",nil,panel,"UICheckButtonTemplate")
-    captureToggle:SetPoint("TOPLEFT",panel,"TOPLEFT",15,-111)
+    captureToggle:SetPoint("TOPLEFT",panel,"TOPLEFT",15,-175)
     captureToggle:SetSize(24,24)
     captureToggle:SetChecked(not ForeverQuickJoinDB or ForeverQuickJoinDB.captureWhispers~=false)
     captureToggle:SetScript("OnClick",function(self)
         if ForeverQuickJoinDB then ForeverQuickJoinDB.captureWhispers=self:GetChecked() end
         Status(self:GetChecked() and "Capturing incoming whispers (session-only)." or "Whisper capture paused.")
     end)
-    Label(panel,"Capture incoming whispers while this addon is loaded (session-only; not saved).",43,112,735,24)
-    inboxLabel=Label(panel,"APPLICANTS (0)",17,152,770,24,"GameFontNormal")
+    Label(panel,"Capture incoming whispers while this addon is loaded (session-only; not saved).",43,176,735,24)
+    inboxLabel=Label(panel,"APPLICANTS (0)",17,211,770,24,"GameFontNormal")
     -- Opaque, visible left queue / right one-applicant conversation.
     local left=CreateFrame("Frame",nil,panel,"BackdropTemplate")
-    left:SetPoint("TOPLEFT",panel,"TOPLEFT",15,-179)
-    left:SetSize(306,470)
+    left:SetPoint("TOPLEFT",panel,"TOPLEFT",15,-239)
+    left:SetSize(306,445)
     left:SetBackdrop({bgFile="Interface\\Buttons\\WHITE8X8"})
     left:SetBackdropColor(.075,.09,.12,1)
     local right=CreateFrame("Frame",nil,panel,"BackdropTemplate")
-    right:SetPoint("TOPLEFT",panel,"TOPLEFT",330,-179)
-    right:SetSize(465,470)
+    right:SetPoint("TOPLEFT",panel,"TOPLEFT",330,-239)
+    right:SetSize(465,445)
     right:SetBackdrop({bgFile="Interface\\Buttons\\WHITE8X8"})
     right:SetBackdropColor(.075,.09,.12,1)
     for i=1,ROWS_PER_PAGE do
@@ -543,7 +543,7 @@ function Host.Attach(parent)
     declineButton=Button(right,"Decline + Remove",113,405,131,26,DeclineSelected)
     dismissButton=Button(right,"Dismiss",251,405,90,26,ClearSelected)
     whoButton=Button(right,"Lookup /who",348,405,104,26,TryWho)
-    Label(panel,"Roles from whisper text are self-reported. Confirm unknown roles manually; /who is user-initiated.",17,660,788,20)
+    Label(panel,"Roles from whisper text are self-reported. Confirm unknown roles manually; /who is user-initiated.",17,691,788,20)
     panel:Hide()
     UpdateListingUI()
     Host.Redraw()
