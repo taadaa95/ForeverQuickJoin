@@ -1,0 +1,8 @@
+## Interface: 16001
+## Title: Forever QuickJoin
+## Notes: Group Finder with role vacancies, sorting, minimap button, party-aware whispers and live location. /qj
+## Category: Group Finder
+## Version: 0.5.2
+## SavedVariablesPerCharacter: ForeverQuickJoinDB
+
+ForeverQuickJoin.lua
