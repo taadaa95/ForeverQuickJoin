@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.2 — 2026-11-08
+
+- Display the group listing's **Playstyle** beneath its activity: Learning, Relaxed, Competitive, or Carry Offered.
+- Read the actual `generalPlaystyle` result field, using Blizzard's translated labels when available and an explicit unavailable fallback.
+- Keep role icons, whisper buttons, activity filtering, sorting, and the native-hosting handoff unchanged.
+
 ## 0.6.1 — 2026-11-08
 
 - Fixed the live Forever `ADDON_ACTION_BLOCKED` reported at `ForeverQuickJoin_Host.lua:427`.
