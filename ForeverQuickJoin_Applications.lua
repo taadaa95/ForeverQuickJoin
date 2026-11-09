@@ -117,6 +117,12 @@ local function Refresh()
     if conversation.ScrollToBottom then conversation:ScrollToBottom() end
 end
 
+local function UpdateFinderBadge()
+    if window and window:IsShown() and window.QuickJoinUpdateSent then
+        window.QuickJoinUpdateSent()
+    end
+end
+
 local function PruneOldest()
     while #entries>MAX_ENTRIES do
         local removed=table.remove(entries)
@@ -161,6 +167,7 @@ function Apps.TrackSent(record,info,message)
     AddMessage(entry,"out",outgoing)
     PruneOldest()
     Refresh()
+    UpdateFinderBadge()
 end
 
 function Apps.ListingEnded(record)
@@ -178,32 +185,32 @@ function Apps.StatusFor(record)
     return "Sent"
 end
 
+local function FindEntry(sender)
+    local key=NameKey(sender)
+    if not key then return nil end
+    -- Exact realm-qualified identity wins.
+    for _,entry in ipairs(entries) do
+        if entry.nameKey==key and not entry.ended then return entry end
+    end
+    -- If only one active leader matches a base name, an incomplete realm
+    -- suffix is safe; otherwise do not attach the message to a group.
+    local base=key:match("^([^%-]+)")
+    if not base then return nil end
+    local candidate,identity=nil,nil
+    for _,entry in ipairs(entries) do
+        if not entry.ended and entry.nameKey
+            and entry.nameKey:match("^([^%-]+)")==base then
+            if identity and identity~=entry.nameKey then return nil end
+            candidate,identity=entry,entry.nameKey
+        end
+    end
+    return candidate
+end
+
 local function Receive(message,sender)
     message,sender=Plain(message),Plain(sender)
     if not message or not sender then return end
-    local key=NameKey(sender)
-    if not key then return end
-    local match=nil
-    -- Prefer exact fully-qualified realm names to prevent cross-realm leaks.
-    for _,entry in ipairs(entries) do
-        if entry.nameKey==key and not entry.ended then match=entry;break end
-    end
-    if not match then
-        -- A returned realm suffix is only safe to ignore when exactly one
-        -- active contacted leader shares the base name.
-        local base=key:match("^([^%-]+)")
-        if base then
-            local found,distinct=nil,0
-            for _,entry in ipairs(entries) do
-                if not entry.ended and entry.nameKey
-                    and entry.nameKey:match("^([^%-]+)")==base then
-                    if found and found.nameKey~=entry.nameKey then distinct=2;break end
-                    found=entry;distinct=1
-                end
-            end
-            if distinct==1 then match=found end
-        end
-    end
+    local match=FindEntry(sender)
     if not match then return end
     AddMessage(match,"in",message)
     match.replies=match.replies+1
@@ -212,6 +219,21 @@ local function Receive(message,sender)
     else
         match.unread=match.unread+1
     end
+    Refresh()
+    UpdateFinderBadge()
+end
+
+local function Outgoing(message,recipient)
+    message,recipient=Plain(message),Plain(recipient)
+    if not message or not recipient then return end
+    local match=FindEntry(recipient)
+    if not match then return end
+    local last=match.messages[#match.messages]
+    -- QuickJoin's own click is already recorded by TrackSent. Ignore the
+    -- corresponding WHISPER_INFORM confirmation so it is not doubled.
+    if last and last.direction=="out" and last.message==message
+        and Clock()-last.at<3 then return end
+    AddMessage(match,"out",message)
     Refresh()
 end
 
@@ -298,6 +320,8 @@ function Apps.Counts() return #entries,CountUnread() end
 
 local listener=CreateFrame("Frame")
 listener:RegisterEvent("CHAT_MSG_WHISPER")
+listener:RegisterEvent("CHAT_MSG_WHISPER_INFORM")
 listener:SetScript("OnEvent",function(_,event,message,sender)
-    if event=="CHAT_MSG_WHISPER" then Receive(message,sender) end
+    if event=="CHAT_MSG_WHISPER" then Receive(message,sender)
+    elseif event=="CHAT_MSG_WHISPER_INFORM" then Outgoing(message,sender) end
 end)
