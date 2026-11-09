@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.5 — 2026-11-09
+
+- Suppressed duplicate class labels when the server reports the class name as the specialization.
+- Kept **Whisper to Join** anchored in the listing header when expanded, remaining clickable with the roster open.
+- Added collapsible **Advanced Filters**, including class exclusions based on actual member data, playstyle, maximum group member count, descriptions-only, and whisperable-leader filters.
+- Treat unreadable member classes conservatively by default, with an explicit opt-in for including unknown rosters.
+- Saved advanced filters per character, merged standard and advanced Clear actions, and hid the filter panel when switching to hosting.
+- Verified via Lua 5.4 simulated in-game tests, including raid expansion, protected-action avoidance, and live whisper button interaction.
+
 ## 0.6.4 — 2026-11-09
 
 - Click a listing to expand an inline two-column member roster, with Blizzard role and class icons.
