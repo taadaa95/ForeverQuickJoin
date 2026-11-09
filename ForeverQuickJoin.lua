@@ -171,7 +171,22 @@ local function MarkSent(id, info, leader)
     local key = SentIdentity(id, info)
     if not key then return end
     local old = state.sentByListing[key]
-    if old then RemoveSent(old) end
+    if old then
+        local started=SentStartTime(info)
+        if not old.started or not started or math.abs(old.started-started)<=90 then
+            -- A repeat whisper to the same live listing belongs to the
+            -- existing application thread, not a duplicate contacted group.
+            old.id=id
+            old.leader=leader
+            old.started=started or old.started
+            old.snapshot=SnapshotSentInfo(info,id)
+            old.at=type(GetTime)=="function" and GetTime() or old.at
+            state.sentByID[id]=old
+            state.pinnedRealIDs[id]=true
+            return old
+        end
+        RemoveSent(old)
+    end
     local virtualID=state.nextSentVirtualID
     state.nextSentVirtualID=virtualID-1
     local record = { id = id, key = key, leader = leader, virtualID=virtualID,
