@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.9 — 2026-11-09
+
+- Consolidated all Find Groups filters, level-range selection, and member sorting inside **Advanced Filters**, preserving saved settings and protected-search behavior.
+- Expanded the persistent **Party detected** panel below Search in both QuickJoin tabs, with larger role icons and an easier-to-find role review/change button.
+- Adjusted the hosting inbox layout to remain accessible below the enlarged party panel.
+- Simplified Party Role Manager to Tank / Healer / DPS role choices, removed **Send anyway once**, and added a prominent icon reflecting each selected member role.
+- Fixed the **Auto** action changing into a question mark on refresh; unknown roles must be assigned before a group-composition whisper can be sent.
+- Aligned the **Preview:** label and whisper text along the same top baseline.
+
 ## 0.6.8 — 2026-11-09
 
 - Added a persistent **Party detected** composition strip in Find Groups and List Group with Blizzard role icons and Tank / Healer / DPS / Unknown counts.
