@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.4 — 2026-11-09
+
+- Click a listing to expand an inline two-column member roster, with Blizzard role and class icons.
+- Display member names (when public), level, class, assigned role, spec, location, and the leader indicator; show unknowns explicitly.
+- Display group notes in the expanded panel and support up to 40 members with an internal scroll area.
+- Keep the whisper editor visible; collapse entries, change pages and filters without protected Search calls.
+- Preserve independent searching, all-levels toggle, playstyle labels, and the group-hosting inbox.
+
 ## 0.6.3 — 2026-11-08
 
 - Added a persistent **Show all level ranges** checkbox to the Find Groups window; the existing `/qj all` shortcut stays synchronized.
