@@ -1,23 +1,16 @@
--- Forever QuickJoin 0.7.1 -- sharp role artwork and streamlined role correction.
+-- Forever QuickJoin 0.7.2 -- native-size Blizzard role icons in both party panels.
 -- This does not change Blizzard's protected group roles or inspect talents/specs.
 local Party = {}
 ForeverQuickJoinParty = Party
 
 local ROLE_ORDER = {"TANK", "HEALER", "DAMAGER"}
 local ROLE_NAME = {TANK="Tank", HEALER="Healer", DAMAGER="DPS", UNKNOWN="Unknown"}
-local ROLE_ICON = {
-    TANK="|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp:14:14:0:-1:64:64:0:19:22:41|t",
-    HEALER="|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp:14:14:0:-1:64:64:20:39:1:20|t",
-    DAMAGER="|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp:14:14:0:-1:64:64:20:39:22:41|t",
-    UNKNOWN="",
-}
--- The old PORTRAITROLES sheet allocates only ~19px per icon, which blurs
--- when enlarged. Blizzard's larger 256x64 UI-LFG-ICON-ROLES sheet gives
--- each role a native 64x64 region, rendered here at 28px.
-local ROLE_ICON_LARGE = {
-    TANK="|TInterface\\LFGFrame\\UI-LFG-ICON-ROLES:28:28:0:-1:256:64:128:192:0:64|t",
-    HEALER="|TInterface\\LFGFrame\\UI-LFG-ICON-ROLES:28:28:0:-1:256:64:192:256:0:64|t",
-    DAMAGER="|TInterface\\LFGFrame\\UI-LFG-ICON-ROLES:28:28:0:-1:256:64:64:128:0:64|t",
+-- The PORTRAITROLES sheet provides native 19x19 role artwork. Display
+-- it at exactly 19x19 pixels (no stretching, shrinking or alternate atlas).
+local ROLE_ICON_NATIVE = {
+    TANK="|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp:19:19:0:0:64:64:0:19:22:41|t",
+    HEALER="|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp:19:19:0:0:64:64:20:39:1:20|t",
+    DAMAGER="|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp:19:19:0:0:64:64:20:39:22:41|t",
 }
 -- Original WoW classes with more than one traditional group role.
 -- Forever customizations cannot reliably be inferred from class or spec;
@@ -217,9 +210,9 @@ local function RefreshView()
         else
             summaryTitle:SetText("Solo — role: "..(ROLE_NAME[members[1].role] or "Unknown"))
         end
-        summaryCounts:SetText(ROLE_ICON_LARGE.TANK.." "..count.TANK.."    "
-            ..ROLE_ICON_LARGE.HEALER.." "..count.HEALER.."    "
-            ..ROLE_ICON_LARGE.DAMAGER.." "..count.DAMAGER
+        summaryCounts:SetText(ROLE_ICON_NATIVE.TANK.." "..count.TANK.."    "
+            ..ROLE_ICON_NATIVE.HEALER.." "..count.HEALER.."    "
+            ..ROLE_ICON_NATIVE.DAMAGER.." "..count.DAMAGER
             ..(count.UNKNOWN>0 and ("   Unassigned: "..count.UNKNOWN) or ""))
         summaryNotice:SetText(review>0 and (review.." role"..(review==1 and "" or "s").." need review")
             or (grouped and "Roles confirmed" or "Current character"))
@@ -242,13 +235,13 @@ local function RefreshView()
             row:Show()
             row.title:SetText((m.isSelf and "You: " or "")..m.name.."  •  Lv"..m.level.." "..m.className)
             if m.role=="TANK" then
-                row.roleIcon:SetTexCoord(0.5,0.75,0,1)
+                row.roleIcon:SetTexCoord(0,19/64,22/64,41/64)
                 row.roleIcon:Show()
             elseif m.role=="HEALER" then
-                row.roleIcon:SetTexCoord(0.75,1,0,1)
+                row.roleIcon:SetTexCoord(20/64,39/64,1/64,20/64)
                 row.roleIcon:Show()
             elseif m.role=="DAMAGER" then
-                row.roleIcon:SetTexCoord(0.25,0.5,0,1)
+                row.roleIcon:SetTexCoord(20/64,39/64,22/64,41/64)
                 row.roleIcon:Show()
             else
                 -- Unassigned roles require selection; do not show an incorrect icon.
@@ -322,9 +315,10 @@ function Party.Attach(window)
         row:SetBackdrop({bgFile="Interface\\Buttons\\WHITE8X8"})
         row:SetBackdropColor(.085,.105,.14,1)
         row.roleIcon=row:CreateTexture(nil,"ARTWORK")
-        row.roleIcon:SetSize(33,33)
-        row.roleIcon:SetPoint("TOPLEFT",row,"TOPLEFT",12,-12)
-        row.roleIcon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-ROLES")
+        -- 19px pixel-for-pixel sprite, centered in the existing 60px row.
+        row.roleIcon:SetSize(19,19)
+        row.roleIcon:SetPoint("TOPLEFT",row,"TOPLEFT",19,-20)
+        row.roleIcon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp")
         row.roleIcon:Hide()
         row.title=Label(row,"",57,5,333,25,"GameFontNormal")
         row.info=Label(row,"",57,30,333,23,"GameFontHighlightSmall")
