@@ -1,65 +1,66 @@
 # Forever QuickJoin
 
-**Forever QuickJoin** is a Group Finder companion addon for **World of Warcraft: Forever** (client 1.60.1, interface 16001). It helps you find dungeon and raid groups quickly, send a customized request to join, and organize recruitment whispers when you're the group leader.
+**Forever QuickJoin** is an in-game group finder and recruitment assistant for **World of Warcraft: Forever** (client 1.60.1; interface 16001). It helps you find a group, send one-click whispers, and manage people asking to join your group.
 
 ## Features
 
 ### Find Groups
 
-- Browse groups by category and activity, with an optional **Show all level ranges** checkbox.
-- See playstyle (Learning, Relaxed, Competitive, Carry Offered), current group size, and Blizzard tank/healer/DPS role icons.
-- Click a listing to expand its member roster, including class, role, level, specialization and location **when the game provides them**. **Right-click a named member** to prepare a targeted `/who` location lookup; press **Enter** in chat to submit.
-- Sort by total group members and filter by available tank, healer or DPS positions, or groups already containing a tank or healer.
-- **Advanced Filters:** exclude groups containing any of WoW Forever's nine classes; exclude one or more playstyles; set a maximum group size; or show only groups with descriptions or whisperable leaders. Class exclusions require a readable roster, so groups with unknown member classes are hidden while class exclusions are active.
-- Click **Whisper to Join** to send your customizable message without typing it each time.
+- Search Blizzard's Group Finder directly by category and activity; optionally **Show all level ranges**.
+- See each group's activity, playstyle, size, and Blizzard tank/healer/DPS icons.
+- Expand a group to inspect available member names, classes, levels, roles, specializations, and areas. Right-click a named member to prepare a manual `/who` query when their area is unknown.
+- Sort by member count and filter by available party slots and current roles.
+- Use **Advanced Filters** to exclude classes or playstyles, restrict group size, and show only whisperable or described listings.
+- Click **Whisper to Join** to contact a group leader using your saved message.
 
-### Looking up an unknown area
+### Party Roles (new in v0.6.8)
 
-If an expanded group member shows **Area unknown**, right-click their member card. QuickJoin prepares a targeted `/who n-"Character"` command in chat; **press Enter** to run it. When the server returns a matching result through the Who list, QuickJoin fills in the area and labels it **(via /who)**. A Who location is only a momentary snapshot, not live tracking, and expires from the addon’s temporary display cache after five minutes.
+A compact **Party detected** indicator appears in the top bar of **both** Find Groups and List Group. It shows the current Tank / Healer / DPS / Unknown counts, including your own character. A **Correct?** button appears when roles need review; otherwise, **Change** opens the editor.
 
-WoW can restrict or throttle Who requests; some searches return no result, or only appear in Blizzard’s Who interface. There is **no automatic background polling**, and QuickJoin never sends Who searches without you submitting the command. The name must be available in the group roster—hidden players cannot be looked up individually. For this lookup QuickJoin requests that WHO results be shown in Blizzard's Who interface, which may also open that window.
+- QuickJoin detects party and raid members and reads Blizzard-assigned roles, names, classes, and levels.
+- DPS assignments for multi-role classes (such as a Priest) are **flagged for review**, not assumed to be correct. An unavailable role is **Unknown**, not guessed from class.
+- In **Party Role Manager**, choose **Tank**, **Healer**, **DPS**, or **Unknown** for each member. Use **Confirm shown roles** if the detected roles are correct, or **Auto** / **Reset to WoW** to discard manual corrections.
+- Corrections immediately update the role counts and the `{role}` / `{party}` whisper placeholders. If a group whisper contains uncertain roles, QuickJoin opens the manager before sending. **Send anyway once** allows the next whisper without confirmation.
+- Corrections are **local to your current group session**. They are cleared when the group disbands or a member leaves, and flagged for review if Blizzard's assignment changes. They do **not** edit other players' roles in WoW or require other players to install the addon.
+- Open the manager directly with `/qj roles` or `/qj party`.
 
 ### List Group / Applicant Inbox
 
-- Use **Open Blizzard Listing** to create or manage your listing in WoW's native Group Finder interface.
-- Collect incoming whispers in an in-session applicant inbox, grouped by Tank, Healer, DPS and Unknown.
-- Select an applicant to read their conversation and available character details, change the assigned role, reply, invite, decline or dismiss them.
-- Prepare a manual `/who` lookup for additional information when available.
+Use **Open Blizzard Listing** to create and manage your listing in Blizzard's protected UI. QuickJoin collects incoming whispers in a separate, session-only inbox, grouped by self-reported Tank, Healer, DPS, or Unknown role. Select an applicant to see their conversation and known class/level details. Reply, invite, decline, dismiss, or prepare a manual `/who` lookup.
 
-### Whisper templates
+## Whisper messages
 
-When you're solo, the default template is:
+The solo default is:
 
 `Level {level} {class} {role} LFG {activity}, Current location: {location}, inv please!`
 
-The default adjusts when you're in a group to include other party members. Click **Reload Whisper Template** to restore it after editing. Supported tokens are `{level}`, `{class}`, `{role}`, `{activity}`, `{location}`, `{name}`, `{party}`, and `{partycount}`.
+With a party, the default also adds `Party: {party}`. `{party}` includes **other** members' names, levels, classes, and QuickJoin-confirmed roles. Supported placeholders: `{level}`, `{class}`, `{role}`, `{activity}`, `{location}`, `{name}`, `{party}`, and `{partycount}`. Click **Reload Whisper Template** to restore the appropriate default. Custom messages are preserved until you reset them.
 
-## Installation and updates
+## Install and update
 
-**WowUp:** In WowUp, choose your WoW Forever installation, then use **Get Addons → Install from URL** with `https://github.com/taadaa95/ForeverQuickJoin`. Installing from the repository allows WowUp to track new GitHub releases.
+In **WowUp**, select WoW Forever, choose **Install from URL**, and enter:
 
-**Manual:** Download the newest `ForeverQuickJoin-vX.Y.Z-forever.zip` from [Releases](https://github.com/taadaa95/ForeverQuickJoin/releases). Extract it into your Forever `Interface/AddOns` folder so the files are at `Interface/AddOns/ForeverQuickJoin/ForeverQuickJoin.toc`. Type `/reload` in-game.
+`https://github.com/taadaa95/ForeverQuickJoin`
 
-## Commands
+For manual installation, download a release from [GitHub Releases](https://github.com/taadaa95/ForeverQuickJoin/releases) and extract the `ForeverQuickJoin` folder into `_forever_/Interface/AddOns/`. Reload the UI with `/reload`. Future versioned releases are automatically packaged for WowUp from the TOC version.
 
-| Command | Action |
-|---|---|
-| `/qj` | Open or close QuickJoin |
-| `/qj find` | Open Find Groups |
-| `/qj list` | Open List Group / applicant inbox |
-| `/qj reset` | Restore the default whisper template |
-| `/qj all` | Toggle showing activities across all level ranges |
+## Slash commands
+
+| Command | Function |
+| --- | --- |
+| `/qj` | Toggle QuickJoin |
+| `/qj find` | Find Groups |
+| `/qj list` | List Group and Applicant Inbox |
+| `/qj roles` or `/qj party` | Open Party Role Manager |
+| `/qj reset` | Restore the solo/party whisper default |
+| `/qj all` | Toggle all activity level ranges |
 | `/qj activities` | Refresh activity metadata |
-| `/qj retry` | Re-enable Search after a blocked API request |
-| `/qj status` | Display diagnostic information |
+| `/qj retry` | Re-enable a search blocked by the game |
+| `/qj status` | Search and addon diagnostics |
 
-You can also open QuickJoin using its draggable minimap button.
+## Important limitations
 
-## Good to know
-
-- Searches are initiated by clicking **Search**; the addon does not search automatically in the background.
-- WoW restricts some Group Finder actions. Group listing creation and editing happen in Blizzard's own interface.
-- The game may hide roster data or a player's role, level, specialization, or location. Unknown information is not guessed.
-- Incoming recruitment whispers are stored **only for the current game session**; they aren't saved permanently. Role identification from incoming whispers is best-effort and can be corrected manually.
-
-This is an independent community addon, not affiliated with Blizzard Entertainment.
+- Blizzard controls search, listing creation, whispers, invites, and who-queries. Protected actions cannot be run automatically in the background; listing creation occurs in Blizzard's own window.
+- Player details may be withheld by the client. Missing specs, roles, or locations are shown as unknown; `/who` requires you to submit the prepared query yourself.
+- Party role confirmations are **not talent/spec detection**. Verify the roles with your party; QuickJoin does not secretly inspect another player's build or alter their assigned group role.
+- The applicant inbox and party role overrides are session-only. Your filters, minimap position, and whisper template are saved per character.
