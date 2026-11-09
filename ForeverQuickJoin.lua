@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.7.1 -- revised party UI, accessible filters, sent badge, and modern styling.
+-- Forever QuickJoin 0.7.3 -- applications, social matches and new-listing discovery.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
@@ -59,6 +59,10 @@ local state = {
     sentVirtualIDs = {}, -- virtual cached rows for sent groups absent from new search scopes
     pinnedRealIDs = {}, -- live sent groups bypass local filters and stay visible
     nextSentVirtualID = -1,
+    seenListings = {}, -- fingerprints of groups seen in completed manual searches
+    scopeSearches = {}, -- previous complete search for the same category/activity
+    newListings = {}, -- time-limited NEW highlights
+    seenListingCount = 0,
 }
 local lastWhisperTarget, lastWhisperTime
 local Readable -- declared early for the sent-listing identity helpers
@@ -87,6 +91,9 @@ end
 
 local function RemoveSent(record)
     if not record then return end
+    if ForeverQuickJoinApplications and ForeverQuickJoinApplications.ListingEnded then
+        ForeverQuickJoinApplications.ListingEnded(record)
+    end
     for id,other in pairs(state.sentByID) do
         if other == record then state.sentByID[id] = nil end
     end
@@ -127,7 +134,7 @@ end
 local function SnapshotSentInfo(info, id)
     local snapshot = {}
     for _,field in ipairs({"leaderName","numMembers","name","comment","generalPlaystyle",
-        "isDelisted","hasSelf","age"}) do
+        "isDelisted","hasSelf","age","numCharFriends","numBNetFriends","numGuildMates"}) do
         local value = Readable(info[field])
         if type(value)=="string" or type(value)=="number" or type(value)=="boolean" then
             snapshot[field] = value
@@ -174,6 +181,7 @@ local function MarkSent(id, info, leader)
     state.pinnedRealIDs[id] = true
     state.sentByID[id] = record
     state.sentByListing[key] = record
+    return record
 end
 
 local function ResultInfo(id)
@@ -515,7 +523,10 @@ local function SendWhisper(resultID)
     state.whisperAttemptActive = false
     if state.whisperBlocked then return end
     lastWhisperTarget, lastWhisperTime = name, now
-    MarkSent(resultID, info, name)
+    local sentRecord=MarkSent(resultID, info, name)
+    if sentRecord and ForeverQuickJoinApplications and ForeverQuickJoinApplications.TrackSent then
+        ForeverQuickJoinApplications.TrackSent(sentRecord, info, message)
+    end
     if UpdatePages and window and window:IsShown() then UpdatePages() end
     Status("Whisper submitted to " .. name .. " (Sent marks submission, not confirmed delivery).")
 end
@@ -1844,6 +1855,9 @@ local function CreateWindow()
     if ForeverQuickJoinHost and ForeverQuickJoinHost.Attach then
         ForeverQuickJoinHost.Attach(window)
     end
+    if ForeverQuickJoinApplications and ForeverQuickJoinApplications.Attach then
+        ForeverQuickJoinApplications.Attach(window)
+    end
     window.QuickJoinUpdatePreview = UpdatePreview
     window.QuickJoinStatus = Status
     if ForeverQuickJoinParty and ForeverQuickJoinParty.Attach then
@@ -1980,6 +1994,9 @@ SlashCmdList.FOREVERQUICKJOIN = function(msg)
     elseif msg == "find" then
         if not window then ToggleWindow() elseif not window:IsShown() then window:Show() end
         if ForeverQuickJoinHost then ForeverQuickJoinHost.OpenFind() end
+    elseif msg == "apps" or msg == "applications" then
+        if not window then ToggleWindow() elseif not window:IsShown() then window:Show() end
+        if ForeverQuickJoinHost then ForeverQuickJoinHost.OpenApplications() end
     elseif msg == "roles" or msg == "party" then
         if not window then ToggleWindow() elseif not window:IsShown() then window:Show() end
         if ForeverQuickJoinParty then ForeverQuickJoinParty.Open() end
@@ -2006,7 +2023,7 @@ SlashCmdList.FOREVERQUICKJOIN = function(msg)
     elseif msg == "" then
         ToggleWindow()
     else
-        Print("Commands: /qj, /qj list, /qj find, /qj roles, /qj activities, /qj all, /qj retry, /qj status, /qj reset.")
+        Print("Commands: /qj, /qj list, /qj find, /qj apps, /qj roles, /qj activities, /qj all, /qj retry, /qj status, /qj reset.")
     end
 end
 
