@@ -1,13 +1,21 @@
 # Changelog
 
+## 0.7.0 — 2026-11-09
+
+- Added a persistent green **Sent** badge to contacted group listings. Marker identity uses leader, activity, and listing age where available, and follows refreshed search result IDs.
+- Pinned sent listings remain visible through new searches, activity changes, sorting, and advanced filters; cached-only entries say **Sent (cached)** and cannot be whispered until verified. Confirmed delisting or a distinguishable newly created listing clears the marker.
+- Sent indicates the client-side send request, not confirmed delivery. Tracking is session-only.
+- Added instant-switchable **Forever** (unchanged original style) and **Modern** (flat opaque charcoal/slate, teal accents, square-style controls, cleaner in-game typography) themes. No reload, external UI addons, or bundled fonts required.
+- Theme choices persist per character; all QuickJoin panes, expanded rosters, role manager, and applicant inbox follow the selection.
+
 ## 0.6.9 — 2026-11-09
 
-- Consolidated all Find Groups filters, level-range selection, and member sorting inside **Advanced Filters**, preserving saved settings and protected-search behavior.
-- Expanded the persistent **Party detected** panel below Search in both QuickJoin tabs, with larger role icons and an easier-to-find role review/change button.
-- Adjusted the hosting inbox layout to remain accessible below the enlarged party panel.
-- Simplified Party Role Manager to Tank / Healer / DPS role choices, removed **Send anyway once**, and added a prominent icon reflecting each selected member role.
-- Fixed the **Auto** action changing into a question mark on refresh; unknown roles must be assigned before a group-composition whisper can be sent.
-- Aligned the **Preview:** label and whisper text along the same top baseline.
+- Consolidated all Find Groups filters, level-range selection, and member sorting inside **Advanced Filters**; existing saved preferences and search behavior are preserved.
+- Replaced the small title-bar role strip with a much larger, always-visible **Party detected** status area in both QuickJoin tabs, including large Blizzard role icons and a clearer change/review action.
+- Adjusted the applicant inbox layout to keep the role panel visible without hiding hosting controls.
+- Simplified **Party Role Manager** to Tank / Healer / DPS only, removed **Send anyway once**, and added a prominent selected-role icon beside each character.
+- Fixed the **Auto** button becoming a question mark after a role refresh; unknown members still require a valid role before a group-composition whisper.
+- Aligned the **Preview:** label and the whisper preview on a shared top baseline.
 
 ## 0.6.8 — 2026-11-09
 
