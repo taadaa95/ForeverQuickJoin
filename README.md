@@ -16,11 +16,11 @@
 
 ### Party Roles
 
-A large, persistent **Party detected** panel appears in the area below Search on **both** Find Groups and List Group. It shows current Tank / Healer / DPS totals with large Blizzard role icons, plus any unassigned members. **Review / Fix Roles** appears when confirmation is needed; otherwise, **Change Roles** opens the editor.
+A large, persistent **Party detected** panel appears in the area below Search on **both** Find Groups and List Group. It shows current Tank / Healer / DPS totals with standard native-size Blizzard role icons, plus any unassigned members. **Review / Fix Roles** appears when confirmation is needed; otherwise, **Change Roles** opens the editor.
 
 - QuickJoin detects party and raid members and reads Blizzard-assigned roles, names, classes, and levels.
 - DPS assignments for multi-role classes (such as a Priest) are **flagged for review**, not assumed to be correct. An unavailable role is **Unknown**, not guessed from class.
-- In **Party Role Manager**, choose **Tank**, **Healer**, or **DPS** for each member. The selected role appears next to the character using a sharper built-in Blizzard role icon. **Auto** clears an individual override and uses the role WoW currently reports; unknown roles require a choice. There are no bulk confirmation or reset buttons.
+- In **Party Role Manager**, choose **Tank**, **Healer**, or **DPS** for each member. The selected role appears next to the character using Blizzard's original role icon at its native 19×19 size (not enlarged or reduced). **Auto** clears an individual override and uses the role WoW currently reports; unknown roles require a choice. There are no bulk confirmation or reset buttons.
 - Corrections immediately update the role counts and the `{role}` / `{party}` whisper placeholders. If a group whisper contains uncertain roles, QuickJoin opens the manager and requires you to confirm them first; there is no bypass button.
 - Corrections are **local to your current group session**. They are cleared when the group disbands or a member leaves, and flagged for review if Blizzard's assignment changes. They do **not** edit other players' roles in WoW or require other players to install the addon.
 - Open the manager directly with `/qj roles` or `/qj party`.
