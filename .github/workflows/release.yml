@@ -1,0 +1,48 @@
+name: Publish WoW Forever Release
+
+# Version bumps to main, matching tags, and manual dispatch all publish if missing.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: foreverquickjoin-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out addon source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Package for WoW Forever and WowUp
+        id: package
+        run: python3 scripts/package_release.py
+
+      - name: Publish version if not already released
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.package.outputs.tag }}
+          RELEASE_ZIP: ${{ steps.package.outputs.zip }}
+          RELEASE_NOTES: ${{ steps.package.outputs.notes }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; leaving it unchanged."
+            exit 0
+          fi
+          gh release create "$RELEASE_TAG" "$RELEASE_ZIP" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Forever QuickJoin $RELEASE_TAG" \
+            --notes-file "$RELEASE_NOTES" \
+            --latest
