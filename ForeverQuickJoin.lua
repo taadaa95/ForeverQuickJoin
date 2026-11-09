@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.6.8 -- party role manager, status and confirmed role whispers.
+-- Forever QuickJoin 0.6.9 -- consolidated filters and larger party roles panel.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
@@ -343,11 +343,9 @@ local function SendWhisper(resultID)
     if GroupSize() > 0 and (template:find("{party}",1,true) or template:find("{role}",1,true))
         and ForeverQuickJoinParty and ForeverQuickJoinParty.NeedsReview
         and ForeverQuickJoinParty.NeedsReview() > 0 then
-        if not ForeverQuickJoinParty.ConsumeSendAnyway() then
-            Status("Please confirm uncertain party roles, or choose Send anyway once.")
-            ForeverQuickJoinParty.Open()
-            return
-        end
+        Status("Confirm each uncertain party role before whispering a group leader.")
+        ForeverQuickJoinParty.Open()
+        return
     end
     local message = BuildMessage(info)
     if message == "" then
@@ -1311,64 +1309,15 @@ local function CreateWindow()
     searchButton:SetPoint("LEFT", activityDropdown, "RIGHT", 10, 0)
     searchButton:SetText("Search")
     searchButton:SetScript("OnClick", SearchFromClick)
-    allLevelsButton = CreateFrame("CheckButton", nil, window, "UICheckButtonTemplate")
-    allLevelsButton:SetSize(22, 22)
-    allLevelsButton:SetPoint("TOPLEFT", window, "TOPLEFT", 24, -91)
-    allLevelsButton:SetChecked(db and db.allLevels == true or false)
-    MakeLabel(allLevelsButton, "Show all level ranges", "GameFontHighlightSmall", 26, -2, 205, 22)
-    allLevelsButton:SetScript("OnClick", function(self)
-        SetAllLevelRanges(self:GetChecked())
-    end)
-    MakeLabel(window, "Search retrieves listings on click. Other filters are local.",
-        "GameFontHighlightSmall", 285, -96, 520, 19)
-
-    local function MakeCheck(field, x, y, label, width)
-        local button = CreateFrame("CheckButton", nil, window, "UICheckButtonTemplate")
-        button:SetSize(22,22)
-        button:SetPoint("TOPLEFT", window, "TOPLEFT", x,y)
-        MakeLabel(button, label, "GameFontHighlightSmall", 26, -2, width or 92, 22)
-        button:SetChecked(db and db.filters and db.filters[field] == true or false)
-        button:SetScript("OnClick", function(self) SaveFilter(field, self:GetChecked()) end)
-        filterButtons[field] = button
-        return button
-    end
-    MakeLabel(window, "Space for:", "GameFontNormalSmall", 25, -134, 102, 22)
-    MakeCheck("needTank", 127, -131, "Tank", 70)
-    MakeCheck("needHealer", 250, -131, "Healer", 75)
-    MakeCheck("needDps", 377, -131, "DPS", 70)
-    clearFilterButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-    clearFilterButton:SetSize(100,24)
-    clearFilterButton:SetPoint("TOPLEFT", window, "TOPLEFT", 525, -129)
-    clearFilterButton:SetText("Clear Filters")
-    clearFilterButton:SetScript("OnClick", ResetFilters)
-
-    MakeLabel(window, "Already has:", "GameFontNormalSmall", 25, -168, 102, 22)
-    MakeCheck("hasTank", 127, -164, "Tank", 70)
-    MakeCheck("hasHealer", 250, -164, "Healer", 75)
-    MakeLabel(window, "Sort by:", "GameFontNormalSmall", 500, -166, 80, 22)
-    sortDropdown = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
-    sortDropdown:SetWidth(185)
-    sortDropdown:SetPoint("TOPLEFT", window, "TOPLEFT", 575, -162)
-    sortDropdown:SetDefaultText("Sort: Finder order")
-    sortDropdown:SetupMenu(function(_, root)
-        root:SetTag("MENU_FOREVER_QUICKJOIN_SORT")
-        for _, item in ipairs({
-            {"default", "Finder order"}, {"asc", "Members: fewest"},
-            {"desc", "Members: most"},
-        }) do
-            local order, label = item[1], item[2]
-            root:CreateRadio(label,
-                function(key) return db and db.sortOrder == key end,
-                function(key) SetSort(key) end, order)
-        end
-    end)
+    MakeLabel(window, "Search retrieves groups on click. Filters and sorting are in Advanced Filters.",
+        "GameFontHighlightSmall", 25, -96, 593, 19)
     advancedButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-    advancedButton:SetSize(152, 24)
-    advancedButton:SetPoint("TOPLEFT", window, "TOPLEFT", 646, -129)
+    advancedButton:SetSize(168, 26)
+    advancedButton:SetPoint("TOPLEFT", window, "TOPLEFT", 641, -89)
     advancedButton:SetText("Advanced Filters >>")
 
     advancedPanel = CreateFrame("Frame", "ForeverQuickJoinAdvancedFilters", window, "BackdropTemplate")
-    advancedPanel:SetSize(365, 524)
+    advancedPanel:SetSize(365, 665)
     advancedPanel:SetFrameStrata("DIALOG")
     advancedPanel:SetFrameLevel(window:GetFrameLevel() + 15)
     advancedPanel:SetClampedToScreen(true)
@@ -1386,12 +1335,12 @@ local function CreateWindow()
         local left = window:GetLeft()
         local screenRight = UIParent and UIParent:GetRight()
         if right and screenRight and screenRight - right >= 380 then
-            advancedPanel:SetPoint("TOPLEFT", window, "TOPRIGHT", 6, -102)
+            advancedPanel:SetPoint("TOPLEFT", window, "TOPRIGHT", 6, -75)
         elseif left and left >= 380 then
-            advancedPanel:SetPoint("TOPRIGHT", window, "TOPLEFT", -6, -102)
+            advancedPanel:SetPoint("TOPRIGHT", window, "TOPLEFT", -6, -75)
         else
             -- Small screens: put the drawer inside QuickJoin, above results.
-            advancedPanel:SetPoint("TOPRIGHT", window, "TOPRIGHT", -11, -211)
+            advancedPanel:SetPoint("TOPRIGHT", window, "TOPRIGHT", -11, -102)
         end
     end
     local function ToggleAdvanced(show)
@@ -1419,8 +1368,52 @@ local function CreateWindow()
     local advancedClose = CreateFrame("Button", nil, advancedPanel, "UIPanelCloseButton")
     advancedClose:SetPoint("TOPRIGHT", advancedPanel, "TOPRIGHT", -1, -2)
     advancedClose:SetScript("OnClick", function() ToggleAdvanced(false) end)
+    -- All finder filters live here. Every change applies locally to cached
+    -- results; only the player's explicit Search click queries the server.
+    allLevelsButton = CreateFrame("CheckButton", nil, advancedPanel, "UICheckButtonTemplate")
+    allLevelsButton:SetSize(22, 22)
+    allLevelsButton:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT", 15, -43)
+    allLevelsButton:SetChecked(db and db.allLevels == true or false)
+    MakeLabel(allLevelsButton, "Show all level ranges", "GameFontHighlightSmall", 26, -2, 306, 22)
+    allLevelsButton:SetScript("OnClick", function(self)
+        SetAllLevelRanges(self:GetChecked())
+    end)
+
+    MakeLabel(advancedPanel, "Sort by:", "GameFontNormalSmall", 16, -79, 99, 22)
+    sortDropdown = CreateFrame("DropdownButton", nil, advancedPanel, "WowStyle1DropdownTemplate")
+    sortDropdown:SetWidth(214)
+    sortDropdown:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT", 128, -74)
+    sortDropdown:SetDefaultText("Finder order")
+    sortDropdown:SetupMenu(function(_, root)
+        root:SetTag("MENU_FOREVER_QUICKJOIN_SORT")
+        for _, item in ipairs({
+            {"default", "Finder order"}, {"asc", "Members: fewest"},
+            {"desc", "Members: most"},
+        }) do
+            local order, label = item[1], item[2]
+            root:CreateRadio(label,
+                function(key) return db and db.sortOrder == key end,
+                function(key) SetSort(key) end, order)
+        end
+    end)
+    local function MakeCheck(field, x, y, label, width)
+        local button = CreateFrame("CheckButton", nil, advancedPanel, "UICheckButtonTemplate")
+        button:SetSize(22,22)
+        button:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT", x,y)
+        MakeLabel(button, label, "GameFontHighlightSmall", 26, -2, width or 92, 22)
+        button:SetChecked(db and db.filters and db.filters[field] == true or false)
+        button:SetScript("OnClick", function(self) SaveFilter(field, self:GetChecked()) end)
+        filterButtons[field] = button
+    end
+    MakeLabel(advancedPanel, "Space for:", "GameFontNormalSmall", 16, -114, 200, 20)
+    MakeCheck("needTank", 15, -136, "Tank", 68)
+    MakeCheck("needHealer", 128, -136, "Healer", 78)
+    MakeCheck("needDps", 249, -136, "DPS", 72)
+    MakeLabel(advancedPanel, "Already has:", "GameFontNormalSmall", 16, -171, 200, 20)
+    MakeCheck("hasTank", 15, -193, "Tank", 68)
+    MakeCheck("hasHealer", 128, -193, "Healer", 78)
     MakeLabel(advancedPanel, "Exclude groups containing these classes:",
-        "GameFontHighlightSmall", 15, -47, 336, 19)
+        "GameFontHighlightSmall", 15, -231, 336, 19)
     local visibleIndex = 0
     for _, option in ipairs(CLASS_OPTIONS) do
         local token, english = option[1], option[2]
@@ -1435,7 +1428,7 @@ local function CreateWindow()
             local button = CreateFrame("CheckButton", nil, advancedPanel, "UICheckButtonTemplate")
             button:SetSize(22, 22)
             button:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT",
-                15 + col * 169, -70 - rowNum * 27)
+                15 + col * 169, -253 - rowNum * 27)
             MakeLabel(button, label, "GameFontHighlightSmall", 24, -2, 138, 21)
             button:SetScript("OnClick", function(self)
                 SaveClassExclusion(token, self:GetChecked())
@@ -1446,9 +1439,9 @@ local function CreateWindow()
     end
     MakeLabel(advancedPanel,
         "Class exclusions require a readable roster; unknown rosters are hidden.",
-        "GameFontHighlightSmall", 16, -211, 339, 34)
+        "GameFontHighlightSmall", 16, -386, 339, 34)
     MakeLabel(advancedPanel, "Exclude these playstyles:",
-        "GameFontNormalSmall", 16, -250, 332, 19)
+        "GameFontNormalSmall", 16, -421, 332, 19)
     for i, option in ipairs(ADVANCED_PLAYSTYLES) do
         local id, label = option[1], option[2]
         local col = (i - 1) % 2
@@ -1456,18 +1449,18 @@ local function CreateWindow()
         local button = CreateFrame("CheckButton", nil, advancedPanel, "UICheckButtonTemplate")
         button:SetSize(22, 22)
         button:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT",
-            15 + col * 169, -274 - rowNum * 29)
+            15 + col * 169, -447 - rowNum * 29)
         MakeLabel(button, label, "GameFontHighlightSmall", 24, -2, 137, 21)
         button:SetScript("OnClick", function(self)
             SavePlaystyleExclusion(id, self:GetChecked())
         end)
         advancedPlaystyleButtons[id] = button
     end
-    MakeLabel(advancedPanel, "Max members:", "GameFontNormalSmall", 16, -351, 108, 21)
+    MakeLabel(advancedPanel, "Max members:", "GameFontNormalSmall", 16, -518, 108, 21)
     advancedMaxMembersDropdown = CreateFrame("DropdownButton", nil,
         advancedPanel, "WowStyle1DropdownTemplate")
     advancedMaxMembersDropdown:SetWidth(215)
-    advancedMaxMembersDropdown:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT", 128, -346)
+    advancedMaxMembersDropdown:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT", 128, -513)
     advancedMaxMembersDropdown:SetupMenu(function(_, root)
         root:SetTag("MENU_FOREVER_QUICKJOIN_ADVANCED_SIZE")
         for _, option in ipairs(ADVANCED_MAX_MEMBERS) do
@@ -1485,11 +1478,11 @@ local function CreateWindow()
         button:SetScript("OnClick", function(self) SaveAdvanced(field, self:GetChecked()) end)
         advancedCheckButtons[field] = button
     end
-    AdvancedCheck("whisperable", "Only groups I can whisper", -394)
-    AdvancedCheck("hasNotes", "Only groups with descriptions", -426)
+    AdvancedCheck("whisperable", "Only groups I can whisper", -557)
+    AdvancedCheck("hasNotes", "Only groups with descriptions", -587)
     local clearAdvanced = CreateFrame("Button", nil, advancedPanel, "UIPanelButtonTemplate")
     clearAdvanced:SetSize(135, 23)
-    clearAdvanced:SetPoint("TOPRIGHT", advancedPanel, "TOPRIGHT", -15, -480)
+    clearAdvanced:SetPoint("TOPRIGHT", advancedPanel, "TOPRIGHT", -15, -628)
     clearAdvanced:SetText("Clear All Filters")
     clearAdvanced:SetScript("OnClick", ResetFilters)
     advancedPanel:Hide()
@@ -1624,8 +1617,9 @@ local function CreateWindow()
         end
         UpdatePreview()
     end)
-    previewTitleLabel = MakeLabel(window, "Preview:", "GameFontNormalSmall", 26, -655, 70, 24)
-    previewLabel = MakeLabel(window, "", "GameFontHighlightSmall", 98, -655, 702, 55)
+    previewTitleLabel = MakeLabel(window, "Preview:", "GameFontNormalSmall", 26, -657, 70, 56)
+    previewTitleLabel:SetJustifyV("TOP")
+    previewLabel = MakeLabel(window, "", "GameFontHighlightSmall", 100, -657, 700, 56)
     previewLabel:SetJustifyV("TOP")
     locationLabel = MakeLabel(window, "", "GameFontNormalSmall", 26, -717, 785, 20)
     statusLabel = MakeLabel(window, "Waiting for activities...", "GameFontHighlightSmall", 26, -741, 785, 20)
@@ -1877,7 +1871,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
     elseif event == "PLAYER_LOGIN" then
         CreateMinimapButton()
         SyncDefaultForParty()
-        Print("v0.6.8 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        Print("v0.6.9 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
