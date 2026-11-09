@@ -1,4 +1,4 @@
-# Forever QuickJoin v0.6.4
+# Forever QuickJoin v0.6.5
 
 A World of Warcraft **Forever** (1.60.1, Interface `16001`) addon for finding groups, managing listings using Blizzard’s secure listing tab, and handling incoming recruitment whispers in a dedicated role-sorted inbox.
 
@@ -8,6 +8,17 @@ A World of Warcraft **Forever** (1.60.1, Interface `16001`) addon for finding gr
 2. Extract the ZIP so the path is `_forever_/Interface/AddOns/ForeverQuickJoin/ForeverQuickJoin.toc`.
 3. Restart WoW, or type `/reload` after updating the addon.
 4. Open with `/qj` or the minimap button. `/qj list` opens the hosting screen directly; `/qj find` opens group search.
+
+## New in v0.6.5 — Roster fixes and Advanced Filters
+
+- **Member class formatting:** The member panel shows the class once. When Forever's `specName` is just a repetition of `className`, QuickJoin suppresses it; real specializations remain visible.
+- **Always-accessible Whisper to Join:** The Whisper button stays pinned to the fixed-height listing header when the roster is expanded (rather than moving with the expanded row).
+- **Advanced Filters:** Click **Advanced Filters >>** near the standard role filters to open an opaque side panel (or an inset overlay on smaller screens). Click the button again or the close icon to collapse it.
+- **Exclude classes:** Select any combination of class checkboxes to hide groups already containing those classes, such as **Warlock** and **Warrior**. The filters use each listed member's actual `classFilename`, retrieved from the read-only LFG API. If the roster is incomplete or unreadable, QuickJoin excludes that group by default; select **Include groups with unreadable rosters** to allow it as a possible match.
+- **Additional options:** Filter by **Playstyle**, maximum current member count, **Only groups I can whisper** (leader name is accessible), and **Only groups with descriptions**. Advanced filters combine with existing role filters and apply to the already cached results; use the normal **Search** button for new server results.
+- **Saved preferences:** Advanced options persist per character. **Clear Filters** and **Clear All Filters** reset both standard and advanced criteria. The drawer closes automatically when switching to **List Group**.
+
+**Class-filter caveat:** Excluding a class can only be guaranteed when the client exposes the full member roster. Enabling the unknown-roster override may let unverified groups through; it does not mean the missing members were checked. Missing member details are not inferred using class/spec guesses or automatic `/who` calls.
 
 ## Find Groups
 
