@@ -14,6 +14,16 @@
 
 - Contacted listings display a distinct **green Sent** indicator. When the contacted leader replies, it becomes **Reply** and the Applications tab shows the unread conversation. Sent groups remain pinned at the top even after searching other activities or changing filters.
 
+
+<img width="1415" height="1314" alt="screenshot-2026-11-09_18-27-24" src="https://github.com/user-attachments/assets/d91bea99-f5a0-410a-b0b9-521f0c5c4663" />
+
+<img width="604" height="1129" alt="screenshot-2026-11-09_18-27-38" src="https://github.com/user-attachments/assets/861b95d2-6055-4cc0-840a-b3d96a57a917" />
+
+<img width="1418" height="1321" alt="screenshot-2026-11-09_18-27-51" src="https://github.com/user-attachments/assets/97a4db1f-8468-4dbc-b24d-5110ca79b398" />
+
+<img width="612" height="1131" alt="screenshot-2026-11-09_18-27-57" src="https://github.com/user-attachments/assets/9cf5f338-363a-427e-8687-b717ba239432" />
+
+
 ### My Applications & reply tracking
 
 The **Applications** tab shows the groups you've contacted through QuickJoin and your outgoing messages. Replies from a matching leader are attached to that conversation, and an unread counter appears on the Applications tab. Open a conversation to mark its replies read, or click **Reply to leader** to prepare a whisper in Blizzard chat (press Enter yourself to send). Follow-up whispers to the same active listing stay in the same thread.
