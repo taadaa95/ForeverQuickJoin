@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.3 — 2026-11-08
+
+- Added a persistent **Show all level ranges** checkbox to the Find Groups window; the existing `/qj all` shortcut stays synchronized.
+- When enabled, out-of-range activities appear in the activity selector and are included when searching all activities in a category.
+- When disabled, the dropdown, category-wide search scope, and cached listings honor suggested level ranges.
+- Changing the checkbox never triggers a protected server Search call; explicitly click **Search** to refresh results.
+- Preserved Blizzard playstyle labels, whisper workflow, and the hosting applicant inbox.
+
 ## 0.6.2 — 2026-11-08
 
 - Display the group listing's **Playstyle** beneath its activity: Learning, Relaxed, Competitive, or Carry Offered.
