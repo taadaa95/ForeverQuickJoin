@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.6 — 2026-11-09
+
+- Restricted Advanced Filters to WoW Forever's nine playable classes: Warrior, Paladin, Hunter, Rogue, Priest, Shaman, Mage, Warlock, and Druid.
+- Replaced the single playstyle selector with independent **Exclude these playstyles** checkboxes for Learning, Relaxed, Competitive, and Carry Offered.
+- Removed the **Include groups with unreadable rosters** checkbox. Class exclusions remain conservative when member classes are unavailable.
+- Cleaned old saved settings for retail-only classes, the prior playstyle selector, and the removed roster option. Valid class exclusions and new playstyle exclusions persist.
+- Rewrote the README as user-facing documentation covering features, installation, commands, and limitations.
+
 ## 0.6.5 — 2026-11-09
 
 - Suppressed duplicate class labels when the server reports the class name as the specialization.
