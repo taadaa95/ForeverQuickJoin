@@ -1229,6 +1229,7 @@ UpdatePages = function()
                 row.activity:SetText("")
                 row.playstyle:SetText("")
                 row.sentBadge:SetText("")
+                row.related:SetText("")
                 row.composition:SetText("")
                 row.whisper:Disable()
                 row.expand:Disable()
@@ -1240,14 +1241,24 @@ UpdatePages = function()
                 local activity = ResultActivityName(info)
                 local displayName = type(name) == "string" and name ~= "" and name or "Leader hidden"
                 row.label:SetText(Truncate(displayName, 21))
+                row.related:SetText(RelatedLabel(info))
+                row.socialCounts=RelatedCounts(info)
                 row.activity:SetText(Truncate(activity, 33))
-                local sent = (not verified and state.sentVirtualIDs[resultID] ~= nil)
-                    or MatchSent(resultID, info) ~= nil
-                row.playstyle:SetText("Playstyle: " .. Truncate(ResultPlaystyle(info), 23))
-                -- A narrow green status between composition and Whisper. Cached
-                -- results retain the marker but cannot be whispered until verified.
-                row.sentBadge:SetText(sent and (not verified and "|cff45df87Sent*|r"
-                    or "|cff45df87Sent|r") or "")
+                local rec=(not verified and state.sentVirtualIDs[resultID]) or
+                    MatchSent(resultID,info)
+                local replyStatus=rec and ForeverQuickJoinApplications and
+                    ForeverQuickJoinApplications.StatusFor and
+                    ForeverQuickJoinApplications.StatusFor(rec)
+                local age=AgeLabel(Readable(info.age))
+                local isNew=verified and IsNewListing(resultID,info)
+                -- NEW is earned only by observing a fresh listing on a completed
+                -- user search; age alone never proves a group is still active.
+                row.playstyle:SetText(Truncate(ResultPlaystyle(info), 18)
+                    ..(isNew and "  |cff69e3a2NEW|r" or "")
+                    ..(age and ("  |cffaaaaaa"..age.."|r") or ""))
+                row.sentBadge:SetText(rec and (replyStatus=="Replied"
+                    and (verified and "|cff55e3b2Reply|r" or "|cff55e3b2Reply*|r")
+                    or (verified and "|cff45df87Sent|r" or "|cff45df87Sent*|r")) or "")
                 row.composition:SetText(GroupComposition(resultID, info))
                 row.whisper:SetEnabled(verified and type(name) == "string" and name ~= ""
                     and type(members) == "number" and members >= 1 and not removed and own == false)
@@ -1846,14 +1857,31 @@ local function CreateWindow()
             if ForeverQuickJoinTheme and ForeverQuickJoinTheme.RowHover then
                 ForeverQuickJoinTheme.RowHover(row, true)
             else row:SetBackdropColor(0.17, 0.20, 0.27, 1) end
+            if row.resultID and GameTooltip then
+                GameTooltip:SetOwner(row.expand,"ANCHOR_RIGHT")
+                GameTooltip:AddLine("Group Finder listing",1,.82,0)
+                local related=row.socialCounts
+                if related then
+                    if related.character>0 then GameTooltip:AddLine("Character friends: "..related.character,.65,.82,1) end
+                    if related.battle>0 then GameTooltip:AddLine("Battle.net friends: "..related.battle,.65,.82,1) end
+                    if related.guild>0 then GameTooltip:AddLine("Guildmates: "..related.guild,1,.82,.45) end
+                end
+                local info=ResultInfo(row.resultID)
+                local age=type(info)=="table" and AgeLabel(Readable(info.age))
+                if age then GameTooltip:AddLine("Listing age: approximately "..age,.82,.82,.85) end
+                GameTooltip:Show()
+            end
         end)
         row.expand:SetScript("OnLeave", function()
             if ForeverQuickJoinTheme and ForeverQuickJoinTheme.RowHover then
                 ForeverQuickJoinTheme.RowHover(row, false)
             else row:SetBackdropColor(0.10, 0.12, 0.16, 1) end
+            if GameTooltip then GameTooltip:Hide() end
         end)
         row.label = MakeLabel(row, "", "GameFontHighlightSmall", 26, -1, 153, 16)
-        -- Keep Sent immediately left of the Whisper button, NOT below the leader.
+        row.related = MakeLabel(row, "", "GameFontNormalSmall", 26, -18, 153, 15)
+        -- F = character friends, B = Battle.net friends, G = guildmates.
+        -- Keep Sent/Reply immediately left of Whisper, NOT below the leader.
         row.sentBadge = MakeLabel(row, "", "GameFontNormalSmall", 599, -8, 40, 22)
         row.activity = MakeLabel(row, "", "GameFontHighlightSmall", 187, -2, 225, 16)
         row.playstyle = MakeLabel(row, "", "GameFontHighlightSmall", 187, -18, 225, 14)
@@ -1964,6 +1992,7 @@ local function CreateWindow()
         ForeverQuickJoinApplications.Attach(window)
     end
     window.QuickJoinUpdatePreview = UpdatePreview
+    window.QuickJoinUpdateSent = UpdatePages
     window.QuickJoinStatus = Status
     if ForeverQuickJoinParty and ForeverQuickJoinParty.Attach then
         ForeverQuickJoinParty.Attach(window)
