@@ -17,7 +17,11 @@ local env={
     state={rosterClassCache={}},
     Readable=function(value) return value end,
     GetMaxMembers=function(info) return info.maximum end,
-    GetCounts=function(_,info) return info.counts end,
+    GetCounts=function(id)
+        if id==1 then return {TANK=0,HEALER=0,DAMAGER=4} end
+        if id==2 then return {TANK=4,HEALER=0,DAMAGER=0} end
+        return nil
+    end,
     ROLE_TARGETS={[5]={TANK=1,HEALER=1,DAMAGER=3}},
     RosterClasses=function() return {classes={PRIEST=true},unknown=false} end,
     UpdateFilterButtons=function() end,
