@@ -1,4 +1,4 @@
-# Forever QuickJoin v0.6.2
+# Forever QuickJoin v0.6.3
 
 A World of Warcraft **Forever** (1.60.1, Interface `16001`) addon for finding groups, managing listings using Blizzard’s secure listing tab, and handling incoming recruitment whispers in a dedicated role-sorted inbox.
 
@@ -10,6 +10,8 @@ A World of Warcraft **Forever** (1.60.1, Interface `16001`) addon for finding gr
 4. Open with `/qj` or the minimap button. `/qj list` opens the hosting screen directly; `/qj find` opens group search.
 
 ## Find Groups
+
+**Show all level ranges:** In Find Groups, check **Show all level ranges** beneath the activity selectors to include activities outside your character's suggested level range. Leave it unchecked for suggested-level activities only. The checkbox updates the activity dropdown, the category's Search activity scope, and locally cached listings. The preference is saved per character; `/qj all` toggles the same setting. Changing it does **not** run a protected Search call: click **Search** to retrieve fresh listings. Actual entry/eligibility restrictions still apply.
 
 Select a category/activity and click **Search**, sort by group size, filter by estimated role vacancies or groups already containing a tank/healer, inspect current group roles, and send customizable one-click whispers. `/qj reset` restores the original solo/group-aware template.
 
