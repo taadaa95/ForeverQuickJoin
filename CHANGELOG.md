@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.1 — 2026-11-08
+
+- Fixed the live Forever `ADDON_ACTION_BLOCKED` reported at `ForeverQuickJoin_Host.lua:427`.
+- The custom List/Update/Delist actions are now replaced by an **Open Blizzard Listing** handoff using `GroupFinderVanillaStyle_LoadUI` and `LFGVanilla_ToggleFrame(1)` (as in LFG Forever).
+- Removed misleading unused listing selectors. Listing creation, editing, and removal are now performed in Blizzard's native protected UI.
+- Preserved role-sorted applicant inbox, player conversations, invite/decline, whisper previews, and independent Find Groups.
+- Added combat guard and active-listing indicator. No automatic retries or direct listing API calls.
+
+
 ## 0.6.0 — 2026-11-08
 
 - Added Find Groups / List Group tab navigation and `/qj list` / `/qj find` commands.
