@@ -1,6 +1,6 @@
 # Forever QuickJoin
 
-**Forever QuickJoin** is an in-game group finder and recruitment assistant for **World of Warcraft: Forever** (client 1.60.1; interface 16001). It helps you find a group, send one-click whispers, and manage people asking to join your group.
+**Forever QuickJoin** is an in-game group finder and recruitment assistant for **World of Warcraft: Forever**. It helps you find a group, send one-click whispers, and manage people asking to join your group.
 
 ## Features
 
