@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.7 — 2026-11-09
+
+- Right-click a named player in an expanded group roster to prepare a targeted `/who` command; press Enter to send it through Blizzard.
+- Match returned WHO entries to the exact selected character when possible; never infer or assign an ambiguous player's area.
+- Show successful location matches as `(via /who)`; session-only results expire after five minutes, and unavailable areas remain unknown.
+- Keep the native protected-search behavior unchanged. No automatic Who queries or location polling.
+- Preserve group filtering, expanded rosters, whisper buttons, and the hosting applicant inbox.
+
 ## 0.6.6 — 2026-11-09
 
 - Restricted Advanced Filters to WoW Forever's nine playable classes: Warrior, Paladin, Hunter, Rogue, Priest, Shaman, Mage, Warlock, and Druid.
