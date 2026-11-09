@@ -2,7 +2,7 @@
 ## Title: Forever QuickJoin
 ## Notes: Find groups by activity and playstyle, open native listing, manage role-sorted whispers. /qj
 ## Category: Group Finder
-## Version: 0.6.8
+## Version: 0.6.9
 ## SavedVariablesPerCharacter: ForeverQuickJoinDB
 
 ForeverQuickJoin.lua
