@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.6.3 -- show all level ranges in Find Groups, playstyles and hosting inbox.
+-- Forever QuickJoin 0.6.4 -- expandable group member details and retained Find/Host workflows.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
@@ -27,6 +27,7 @@ local sortDropdown, locationLabel, minimapButton, clearFilterButton, templateRes
 local filterButtons = {}
 local statusLabel, pageLabel, messageBox, previewLabel, previewTitleLabel, prevButton, nextButton
 local rows = {}
+local resultsViewport, resultsCanvas
 local state = {
     categoryID = nil,
     categoryName = nil,
@@ -37,6 +38,7 @@ local state = {
     results = {},
     cachedResults = {},
     page = 1,
+    expandedResultID = nil,
     totalInCache = 0,
     searching = false,
     searchBlocked = false,
@@ -525,7 +527,10 @@ local function RebuildVisibleResults(resetPage)
     end
     state.results = {}
     for _, item in ipairs(out) do table.insert(state.results, item.id) end
-    if resetPage ~= false then state.page = 1 end
+    if resetPage ~= false then
+        state.page = 1
+        if resultsViewport then resultsViewport:SetVerticalScroll(0) end
+    end
     UpdatePages()
     if state.totalInCache == 0 then
         Status("No cached listings yet. Select an activity and click Search.")
@@ -557,6 +562,138 @@ local function SetSort(order)
     RebuildVisibleResults(true)
 end
 
+-- Only use native LFG data. Non-leader names, levels, specs and locations may
+-- be withheld by the server; never initiate a /who or infer missing details.
+local function MemberDetails(resultID, index)
+    local member = { index=index }
+    if C_LFGList and type(C_LFGList.GetSearchResultPlayerInfo) == "function" then
+        local ok, info = pcall(C_LFGList.GetSearchResultPlayerInfo, resultID, index)
+        info = ok and Readable(info) or nil
+        if type(info) == "table" then
+            member.name = Readable(info.name)
+            member.level = Readable(info.level)
+            member.className = Readable(info.className)
+            member.classFilename = Readable(info.classFilename)
+            member.specName = Readable(info.specName)
+            member.role = Readable(info.assignedRole)
+            member.area = Readable(info.areaName)
+            member.isLeader = Readable(info.isLeader) == true
+            member.readable = true
+        end
+    end
+    if not member.readable and C_LFGList and type(C_LFGList.GetSearchResultMemberInfo) == "function" then
+        local ok, role, classFilename, className, specName, isLeader =
+            pcall(C_LFGList.GetSearchResultMemberInfo, resultID, index)
+        if ok then
+            member.role = Readable(role)
+            member.classFilename = Readable(classFilename)
+            member.className = Readable(className)
+            member.specName = Readable(specName)
+            member.isLeader = Readable(isLeader) == true
+            member.readable = type(member.role) == "string" or type(member.classFilename) == "string"
+        end
+    end
+    if type(member.name) ~= "string" or member.name == "" then member.name = "Member " .. index end
+    if type(member.level) ~= "number" or member.level < 1 then member.level = nil end
+    if type(member.className) ~= "string" or member.className == "" then member.className = "Class unknown" end
+    if type(member.classFilename) ~= "string" then member.classFilename = nil end
+    if type(member.specName) ~= "string" or member.specName == "" then member.specName = nil end
+    if type(member.area) ~= "string" or member.area == "" then member.area = nil end
+    if type(member.role) ~= "string" then member.role = "NONE" end
+    return member
+end
+
+local function SafeMarkup(text)
+    -- Player names and client-supplied group descriptions must not inject
+    -- WoW texture / hyperlink markup into FontStrings.
+    return tostring(text or ""):gsub("|", "||"):gsub("[\r\n]", " ")
+end
+
+local function PopulateMemberDetails(row, resultID, info)
+    local n = Readable(info and info.numMembers)
+    if type(n) ~= "number" or n < 1 then n = 0 end
+    n = math.min(40, math.floor(n))
+    local comment = Readable(info and info.comment)
+    local showComment = type(comment) == "string" and comment ~= ""
+    local introHeight = showComment and 53 or 34
+    local lines = math.ceil(n / 2)
+    local height = introHeight + math.max(1, lines) * 45 + 8
+    row.detail:SetHeight(height)
+    row.detailsTitle:SetText(("GROUP MEMBERS (%d)  ·  Class, level, role, spec and area when available"):format(n))
+    if showComment then
+        row.detailsComment:SetText("Notes: " .. SafeMarkup(Truncate(comment, 114)))
+        row.detailsComment:Show()
+    else
+        row.detailsComment:SetText("")
+        row.detailsComment:Hide()
+    end
+    row.detailHint:SetShown(n == 0)
+    if n == 0 then row.detailHint:SetText("Member information is not available for this listing.") end
+    for index = 1, math.max(n, #row.memberTiles) do
+        local tile = row.memberTiles[index]
+        if index <= n then
+            if not tile then
+                tile = CreateFrame("Frame", nil, row.detail, "BackdropTemplate")
+                tile:SetSize(368, 43)
+                tile:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
+                tile:SetBackdropColor(0.09, 0.11, 0.16, 1)
+                tile.icon = tile:CreateTexture(nil, "ARTWORK")
+                tile.icon:SetSize(19, 19)
+                tile.icon:SetPoint("TOPLEFT", tile, "TOPLEFT", 6, -4)
+                tile.title = tile:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                tile.title:SetPoint("TOPLEFT", tile, "TOPLEFT", 29, -3)
+                tile.title:SetSize(332, 18)
+                tile.title:SetJustifyH("LEFT")
+                tile.subtitle = tile:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                tile.subtitle:SetPoint("TOPLEFT", tile, "TOPLEFT", 29, -23)
+                tile.subtitle:SetSize(332, 17)
+                tile.subtitle:SetJustifyH("LEFT")
+                row.memberTiles[index] = tile
+            end
+            tile:ClearAllPoints()
+            tile:SetPoint("TOPLEFT", row.detail, "TOPLEFT", 5 + ((index - 1) % 2) * 376,
+                -(introHeight + math.floor((index - 1) / 2) * 45))
+            local member = MemberDetails(resultID, index)
+            if member.isLeader and member.name == ("Member " .. index) then
+                local leaderName = Readable(info.leaderName)
+                if type(leaderName) == "string" and leaderName ~= "" then
+                    member.name = leaderName
+                end
+            end
+            local coords = type(CLASS_ICON_TCOORDS) == "table" and member.classFilename
+                and CLASS_ICON_TCOORDS[member.classFilename] or nil
+            if type(coords) == "table" then
+                tile.icon:SetTexture("Interface\\WorldStateFrame\\Icons-Classes")
+                tile.icon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+            else
+                tile.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+                tile.icon:SetTexCoord(0, 1, 0, 1)
+            end
+            local role = member.role == "DAMAGE" and "DAMAGER" or member.role
+            local icon = ROLE_ICONS[role] or ""
+            local leaderTag = member.isLeader and " |cffffd100(Leader)|r" or ""
+            tile.title:SetText(icon .. " " .. SafeMarkup(Truncate(member.name, 22)) .. leaderTag)
+            local level = member.level and ("Lv" .. member.level) or "Lv?"
+            local spec = member.specName or "Spec unknown"
+            local area = member.area or "Area unknown"
+            local desc = level .. " " .. member.className .. " · " .. spec .. " · " .. area
+            tile.subtitle:SetText(SafeMarkup(Truncate(desc, 55)))
+            local classColor = type(RAID_CLASS_COLORS) == "table" and member.classFilename
+                and RAID_CLASS_COLORS[member.classFilename] or nil
+            if type(classColor) == "table" then
+                tile.title:SetTextColor(classColor.r or 1, classColor.g or 1, classColor.b or 1)
+            else
+                tile.title:SetTextColor(1, 1, 1)
+            end
+            tile:Show()
+        elseif tile then
+            tile:Hide()
+        end
+    end
+    row.detail:Show()
+    return height
+end
+
 UpdatePages = function()
     if not window then return end
     local total = #state.results
@@ -566,21 +703,30 @@ UpdatePages = function()
     prevButton:SetEnabled(state.page > 1)
     nextButton:SetEnabled(state.page < pages)
 
+    local offset = 0
     for i = 1, PAGE_SIZE do
         local row = rows[i]
         local resultID = state.results[(state.page - 1) * PAGE_SIZE + i]
         row.resultID = resultID
+        row.topOffset = offset
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", resultsCanvas, "TOPLEFT", 0, -offset)
+        row:SetHeight(34)
+        row.detail:Hide()
+        row.expandLabel:SetText("+")
         if not resultID then
             row:Hide()
         else
             row:Show()
             local ok, info = pcall(C_LFGList.GetSearchResultInfo, resultID)
-            if not ok or not info then
+            info = ok and Readable(info) or nil
+            if type(info) ~= "table" then
                 row.label:SetText("Expired listing")
                 row.activity:SetText("")
                 row.playstyle:SetText("")
                 row.composition:SetText("")
                 row.whisper:Disable()
+                row.expand:Disable()
             else
                 local name = Readable(info.leaderName)
                 local members = Readable(info.numMembers)
@@ -588,15 +734,25 @@ UpdatePages = function()
                 local own = Readable(info.hasSelf)
                 local activity = ResultActivityName(info)
                 local displayName = type(name) == "string" and name ~= "" and name or "Leader hidden"
-                row.label:SetText(Truncate(displayName, 23))
+                row.label:SetText(Truncate(displayName, 21))
                 row.activity:SetText(Truncate(activity, 33))
                 row.playstyle:SetText("Playstyle: " .. Truncate(ResultPlaystyle(info), 23))
                 row.composition:SetText(GroupComposition(resultID, info))
                 row.whisper:SetEnabled(type(name) == "string" and name ~= ""
                     and type(members) == "number" and members >= 1 and not removed and own == false)
+                row.expand:SetEnabled(removed ~= true)
+                if state.expandedResultID == resultID and removed ~= true then
+                    row.expandLabel:SetText("-")
+                    row:SetHeight(34 + PopulateMemberDetails(row, resultID, info))
+                end
             end
+            offset = offset + row:GetHeight() + 1
         end
     end
+    resultsCanvas:SetHeight(math.max(315, offset))
+    -- Keep scroll position in range when collapsing an entry or changing pages.
+    local maxScroll = math.max(0, resultsCanvas:GetHeight() - resultsViewport:GetHeight())
+    resultsViewport:SetVerticalScroll(math.min(resultsViewport:GetVerticalScroll(), maxScroll))
 end
 
 local function RefreshResults()
@@ -929,19 +1085,63 @@ local function CreateWindow()
     MakeLabel(window, "LEADER", "GameFontNormalSmall", 36, -214, 160, 16)
     MakeLabel(window, "ACTIVITY / PLAYSTYLE", "GameFontNormalSmall", 211, -214, 222, 16)
     MakeLabel(window, "GROUP ROLES", "GameFontNormalSmall", 442, -214, 210, 16)
+    MakeLabel(window, "Click a row to view members", "GameFontHighlightSmall", 648, -198, 160, 17)
+
+    -- The list scrolls vertically when an expanded group contains many members.
+    -- A fixed viewport prevents the detail panel from overlapping the whisper UI.
+    resultsViewport = CreateFrame("ScrollFrame", nil, window, "UIPanelScrollFrameTemplate")
+    resultsViewport:SetPoint("TOPLEFT", window, "TOPLEFT", 24, -234)
+    resultsViewport:SetSize(764, 315)
+    resultsCanvas = CreateFrame("Frame", nil, resultsViewport)
+    resultsCanvas:SetSize(764, 315)
+    resultsViewport:SetScrollChild(resultsCanvas)
+    resultsViewport:EnableMouseWheel(true)
+    resultsViewport:SetScript("OnMouseWheel", function(self, delta)
+        local maxScroll = math.max(0, resultsCanvas:GetHeight() - self:GetHeight())
+        self:SetVerticalScroll(math.max(0, math.min(maxScroll, self:GetVerticalScroll() - delta * 45)))
+    end)
 
     for i = 1, PAGE_SIZE do
-        local row = CreateFrame("Frame", nil, window, "BackdropTemplate")
-        row:SetSize(790, 34)
-        row:SetPoint("TOPLEFT", window, "TOPLEFT", 24, -(234 + (i - 1) * 35))
+        local row = CreateFrame("Frame", nil, resultsCanvas, "BackdropTemplate")
+        row:SetSize(759, 34)
+        row:SetPoint("TOPLEFT", resultsCanvas, "TOPLEFT", 0, -(i - 1) * 35)
         row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
         row:SetBackdropColor(0.10, 0.12, 0.16, 1)
-        row.label = MakeLabel(row, "", "GameFontHighlightSmall", 10, -8, 168, 22)
+        row.expand = CreateFrame("Button", nil, row)
+        row.expand:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+        row.expand:SetSize(634, 34)
+        row.expandLabel = MakeLabel(row, "+", "GameFontNormal", 9, -9, 16, 18)
+        row.expand:SetScript("OnClick", function()
+            if not row.resultID then return end
+            if state.expandedResultID == row.resultID then
+                state.expandedResultID = nil
+                UpdatePages()
+            else
+                state.expandedResultID = row.resultID
+                UpdatePages()
+                local maxScroll = math.max(0, resultsCanvas:GetHeight() - resultsViewport:GetHeight())
+                resultsViewport:SetVerticalScroll(math.min(row.topOffset or 0, maxScroll))
+            end
+        end)
+        row.expand:SetScript("OnEnter", function() row:SetBackdropColor(0.17, 0.20, 0.27, 1) end)
+        row.expand:SetScript("OnLeave", function() row:SetBackdropColor(0.10, 0.12, 0.16, 1) end)
+        row.label = MakeLabel(row, "", "GameFontHighlightSmall", 26, -8, 153, 22)
         row.activity = MakeLabel(row, "", "GameFontHighlightSmall", 187, -2, 225, 16)
         row.playstyle = MakeLabel(row, "", "GameFontHighlightSmall", 187, -18, 225, 14)
         row.playstyle:SetTextColor(0.72, 0.88, 0.72)
         row.playstyle:SetWordWrap(false)
-        row.composition = MakeLabel(row, "", "GameFontHighlightSmall", 416, -8, 246, 22)
+        row.composition = MakeLabel(row, "", "GameFontHighlightSmall", 416, -8, 220, 22)
+        row.detail = CreateFrame("Frame", nil, row, "BackdropTemplate")
+        row.detail:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -34)
+        row.detail:SetSize(759, 90)
+        row.detail:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
+        row.detail:SetBackdropColor(0.055, 0.07, 0.10, 1)
+        row.detailsTitle = MakeLabel(row.detail, "", "GameFontNormalSmall", 8, -7, 730, 18)
+        row.detailsComment = MakeLabel(row.detail, "", "GameFontHighlightSmall", 8, -27, 735, 19)
+        row.detailsComment:SetTextColor(.82, .82, .84)
+        row.detailHint = MakeLabel(row.detail, "", "GameFontHighlightSmall", 8, -40, 730, 18)
+        row.memberTiles = {}
+        row.detail:Hide()
         row.whisper = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
         row.whisper:SetSize(117, 24)
         row.whisper:SetPoint("RIGHT", row, "RIGHT", -6, 0)
@@ -957,12 +1157,20 @@ local function CreateWindow()
     prevButton:SetSize(90, 24)
     prevButton:SetPoint("TOPLEFT", window, "TOPLEFT", 25, -562)
     prevButton:SetText("Previous")
-    prevButton:SetScript("OnClick", function() state.page = state.page - 1; UpdatePages() end)
+    prevButton:SetScript("OnClick", function()
+        state.page = state.page - 1
+        if resultsViewport then resultsViewport:SetVerticalScroll(0) end
+        UpdatePages()
+    end)
     nextButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
     nextButton:SetSize(90, 24)
     nextButton:SetPoint("TOPRIGHT", window, "TOPRIGHT", -25, -562)
     nextButton:SetText("Next")
-    nextButton:SetScript("OnClick", function() state.page = state.page + 1; UpdatePages() end)
+    nextButton:SetScript("OnClick", function()
+        state.page = state.page + 1
+        if resultsViewport then resultsViewport:SetVerticalScroll(0) end
+        UpdatePages()
+    end)
     pageLabel = MakeLabel(window, "Page 1 / 1", "GameFontHighlightSmall", 277, -567, 300, 20)
     pageLabel:SetJustifyH("CENTER")
 
@@ -1011,6 +1219,7 @@ local function CreateWindow()
     window:SetScript("OnMouseWheel", function(_, delta)
         local pages = math.max(1, math.ceil(#state.results / PAGE_SIZE))
         state.page = math.max(1, math.min(pages, state.page - delta))
+        if resultsViewport then resultsViewport:SetVerticalScroll(0) end
         UpdatePages()
     end)
     window:SetScript("OnShow", function()
@@ -1215,7 +1424,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
     elseif event == "PLAYER_LOGIN" then
         CreateMinimapButton()
         SyncDefaultForParty()
-        Print("v0.6.3 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        Print("v0.6.4 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
