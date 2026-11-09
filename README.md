@@ -8,10 +8,16 @@
 
 - Browse groups by category and activity, with an optional **Show all level ranges** checkbox.
 - See playstyle (Learning, Relaxed, Competitive, Carry Offered), current group size, and Blizzard tank/healer/DPS role icons.
-- Click a listing to expand its member roster, including class, role, level, specialization and location **when the game provides them**.
+- Click a listing to expand its member roster, including class, role, level, specialization and location **when the game provides them**. **Right-click a named member** to prepare a targeted `/who` location lookup; press **Enter** in chat to submit.
 - Sort by total group members and filter by available tank, healer or DPS positions, or groups already containing a tank or healer.
 - **Advanced Filters:** exclude groups containing any of WoW Forever's nine classes; exclude one or more playstyles; set a maximum group size; or show only groups with descriptions or whisperable leaders. Class exclusions require a readable roster, so groups with unknown member classes are hidden while class exclusions are active.
 - Click **Whisper to Join** to send your customizable message without typing it each time.
+
+### Looking up an unknown area
+
+If an expanded group member shows **Area unknown**, right-click their member card. QuickJoin prepares a targeted `/who n-"Character"` command in chat; **press Enter** to run it. When the server returns a matching result through the Who list, QuickJoin fills in the area and labels it **(via /who)**. A Who location is only a momentary snapshot, not live tracking, and expires from the addon’s temporary display cache after five minutes.
+
+WoW can restrict or throttle Who requests; some searches return no result, or only appear in Blizzard’s Who interface. There is **no automatic background polling**, and QuickJoin never sends Who searches without you submitting the command. The name must be available in the group roster—hidden players cannot be looked up individually. For this lookup QuickJoin requests that WHO results be shown in Blizzard's Who interface, which may also open that window.
 
 ### List Group / Applicant Inbox
 
