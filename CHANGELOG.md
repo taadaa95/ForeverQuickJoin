@@ -1,83 +1,48 @@
 # Changelog
 
+## 0.6.8 — 2026-11-09
+
+- Added a persistent **Party detected** composition strip in Find Groups and List Group with Blizzard role icons and Tank / Healer / DPS / Unknown counts.
+- Added **Party Role Manager** with class and level information for each party/raid member, explicit role confirmation and correction, pagination for large raids, and reset-to-WoW controls.
+- Changed the whisper generator to use confirmed QuickJoin roles instead of blindly trusting `UnitGroupRolesAssigned()` for party members.
+- Flagged DPS assignments on multi-role classes, unassigned roles, and changed underlying WoW assignments for review.
+- Open the role manager before sending a group whisper with uncertain roles; allow an explicit one-whisper override.
+- Preserve role confirmations during the current group session, forget departed players, and clear corrections when the group disbands.
+- Added `/qj roles` and `/qj party` commands; no protected role-writing calls or background polling.
+
 ## 0.6.7 — 2026-11-09
 
-- Right-click a named player in an expanded group roster to prepare a targeted `/who` command; press Enter to send it through Blizzard.
-- Match returned WHO entries to the exact selected character when possible; never infer or assign an ambiguous player's area.
-- Show successful location matches as `(via /who)`; session-only results expire after five minutes, and unavailable areas remain unknown.
-- Keep the native protected-search behavior unchanged. No automatic Who queries or location polling.
-- Preserve group filtering, expanded rosters, whisper buttons, and the hosting applicant inbox.
+- Added a manual right-click `/who` lookup for named members in expanded group rosters. Returned zones are short-lived snapshots.
 
 ## 0.6.6 — 2026-11-09
 
-- Restricted Advanced Filters to WoW Forever's nine playable classes: Warrior, Paladin, Hunter, Rogue, Priest, Shaman, Mage, Warlock, and Druid.
-- Replaced the single playstyle selector with independent **Exclude these playstyles** checkboxes for Learning, Relaxed, Competitive, and Carry Offered.
-- Removed the **Include groups with unreadable rosters** checkbox. Class exclusions remain conservative when member classes are unavailable.
-- Cleaned old saved settings for retail-only classes, the prior playstyle selector, and the removed roster option. Valid class exclusions and new playstyle exclusions persist.
-- Rewrote the README as user-facing documentation covering features, installation, commands, and limitations.
+- Corrected class filters for WoW Forever; changed playstyle filters to independent exclusions; removed the unreadable-roster override.
 
 ## 0.6.5 — 2026-11-09
 
-- Suppressed duplicate class labels when the server reports the class name as the specialization.
-- Kept **Whisper to Join** anchored in the listing header when expanded, remaining clickable with the roster open.
-- Added collapsible **Advanced Filters**, including class exclusions based on actual member data, playstyle, maximum group member count, descriptions-only, and whisperable-leader filters.
-- Treat unreadable member classes conservatively by default, with an explicit opt-in for including unknown rosters.
-- Saved advanced filters per character, merged standard and advanced Clear actions, and hid the filter panel when switching to hosting.
-- Verified via Lua 5.4 simulated in-game tests, including raid expansion, protected-action avoidance, and live whisper button interaction.
+- Corrected duplicate class labels and kept Whisper to Join visible with expanded rosters.
+- Added class, playstyle, size, description, and whisperability advanced filters.
 
 ## 0.6.4 — 2026-11-09
 
-- Click a listing to expand an inline two-column member roster, with Blizzard role and class icons.
-- Display member names (when public), level, class, assigned role, spec, location, and the leader indicator; show unknowns explicitly.
-- Display group notes in the expanded panel and support up to 40 members with an internal scroll area.
-- Keep the whisper editor visible; collapse entries, change pages and filters without protected Search calls.
-- Preserve independent searching, all-levels toggle, playstyle labels, and the group-hosting inbox.
+- Added expandable group rosters and available member information.
 
 ## 0.6.3 — 2026-11-08
 
-- Added a persistent **Show all level ranges** checkbox to the Find Groups window; the existing `/qj all` shortcut stays synchronized.
-- When enabled, out-of-range activities appear in the activity selector and are included when searching all activities in a category.
-- When disabled, the dropdown, category-wide search scope, and cached listings honor suggested level ranges.
-- Changing the checkbox never triggers a protected server Search call; explicitly click **Search** to refresh results.
-- Preserved Blizzard playstyle labels, whisper workflow, and the hosting applicant inbox.
+- Added Show all level ranges to Find Groups.
 
 ## 0.6.2 — 2026-11-08
 
-- Display the group listing's **Playstyle** beneath its activity: Learning, Relaxed, Competitive, or Carry Offered.
-- Read the actual `generalPlaystyle` result field, using Blizzard's translated labels when available and an explicit unavailable fallback.
-- Keep role icons, whisper buttons, activity filtering, sorting, and the native-hosting handoff unchanged.
+- Displayed group playstyles (Learning, Relaxed, Competitive, Carry Offered).
 
 ## 0.6.1 — 2026-11-08
 
-- Fixed the live Forever `ADDON_ACTION_BLOCKED` reported at `ForeverQuickJoin_Host.lua:427`.
-- The custom List/Update/Delist actions are now replaced by an **Open Blizzard Listing** handoff using `GroupFinderVanillaStyle_LoadUI` and `LFGVanilla_ToggleFrame(1)` (as in LFG Forever).
-- Removed misleading unused listing selectors. Listing creation, editing, and removal are now performed in Blizzard's native protected UI.
-- Preserved role-sorted applicant inbox, player conversations, invite/decline, whisper previews, and independent Find Groups.
-- Added combat guard and active-listing indicator. No automatic retries or direct listing API calls.
-
+- Moved listing creation and management to Blizzard's native protected listing UI.
 
 ## 0.6.0 — 2026-11-08
 
-- Added Find Groups / List Group tab navigation and `/qj list` / `/qj find` commands.
-- Added one-click group listing, updating and delisting using native protected WoW APIs from physical clicks.
-- Added a session-only role-organized applicant whisper inbox with Blizzard role/class icons and unread counts.
-- Added per-applicant conversations, manual role overrides, Reply, Invite, Decline + Remove, Dismiss and user-confirmed `/who` lookup.
-- Added guarded GUID-based class/level enrichment and optional WHO-based location data, without guessing unavailable spec or role information.
-- Changed preview styling: **Preview:** is in the normal interface color; only the resolved whisper text is pink.
-- Preserved search, sorting, filters, location templates, roster-aware whispers, and minimap launcher.
+- Added the List Group tab, applicant inbox, conversations, invites and declines.
 
-## 0.5.2 — 2026-11-08
+## 0.5.x — 2026-11-08
 
-- Matched message preview color to Blizzard whispers; removed redundant Refresh UI button.
-
-## 0.5.1 — 2026-11-08
-
-- Solo and party-aware whisper defaults, Reload Whisper Template, dynamic party details.
-
-## 0.5.0 — 2026-11-08
-
-- Member sorting, role vacancy/composition filters, minimap button and location preview.
-
-## 0.4.x — 2026-11-08
-
-- Independent Search, Blizzard role icons and location token.
+- Added role icons, sorting, minimap launcher, current-location and party-aware whisper templates.
