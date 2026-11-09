@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.6.5 -- expanded-roster fixes and advanced filters.
+-- Forever QuickJoin 0.6.6 -- Forever class list and exclusion-style playstyle filters.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
@@ -24,8 +24,8 @@ local COOLDOWN = 3
 
 local db, window, categoryDropdown, activityDropdown, searchButton
 local sortDropdown, locationLabel, minimapButton, clearFilterButton, templateResetButton, allLevelsButton
-local advancedButton, advancedPanel, advancedPlaystyleDropdown, advancedMaxMembersDropdown
-local advancedClassButtons, advancedCheckButtons = {}, {}
+local advancedButton, advancedPanel, advancedMaxMembersDropdown
+local advancedClassButtons, advancedPlaystyleButtons, advancedCheckButtons = {}, {}, {}
 local filterButtons = {}
 local statusLabel, pageLabel, messageBox, previewLabel, previewTitleLabel, prevButton, nextButton
 local rows = {}
@@ -442,11 +442,9 @@ local CLASS_OPTIONS = {
     {"HUNTER", "Hunter"}, {"ROGUE", "Rogue"},
     {"PRIEST", "Priest"}, {"SHAMAN", "Shaman"},
     {"MAGE", "Mage"}, {"WARLOCK", "Warlock"}, {"DRUID", "Druid"},
-    {"DEATHKNIGHT", "Death Knight"}, {"MONK", "Monk"},
-    {"DEMONHUNTER", "Demon Hunter"}, {"EVOKER", "Evoker"},
 }
 local ADVANCED_PLAYSTYLES = {
-    {0, "Any playstyle"}, {1, "Learning"}, {2, "Relaxed"},
+    {1, "Learning"}, {2, "Relaxed"},
     {3, "Competitive"}, {4, "Carry Offered"},
 }
 local ADVANCED_MAX_MEMBERS = {
@@ -473,9 +471,9 @@ local function MemberClassToken(resultID, index)
     return nil
 end
 
--- Reads the actual group composition and caches it only until the next native
--- result update or search. Class exclusions require a COMPLETE readable roster
--- unless the user explicitly opts to include groups with unknown members.
+-- Reads actual member classes, caching them until the next native result update.
+-- Class exclusions require a complete readable roster. Unknown member classes
+-- cannot establish that a filtered-out class is absent.
 local function RosterClasses(resultID, numMembers)
     local cached = state.rosterClassCache[resultID]
     if cached and cached.numMembers == numMembers then return cached end
@@ -492,8 +490,14 @@ local function PassesAdvancedFilters(resultID, info)
     local advanced = db and db.advanced or nil
     if not advanced then return true end
     local members = Readable(info.numMembers)
-    if advanced.playstyle and advanced.playstyle ~= 0 then
-        if Readable(info.generalPlaystyle) ~= advanced.playstyle then return false end
+    -- Exclude every selected playstyle, rather than requiring a single style.
+    -- A missing/secret playstyle does not equal any explicitly excluded style.
+    local excludedPlaystyles = advanced.excludedPlaystyles
+    if type(excludedPlaystyles) == "table" then
+        local playstyle = Readable(info.generalPlaystyle)
+        if type(playstyle) == "number" and excludedPlaystyles[playstyle] then
+            return false
+        end
     end
     if advanced.maxMembers and advanced.maxMembers > 0 then
         if type(members) ~= "number" or members > advanced.maxMembers then return false end
@@ -521,7 +525,7 @@ local function PassesAdvancedFilters(resultID, info)
     for class, excludedFlag in pairs(excluded) do
         if excludedFlag and roster.classes[class] then return false end
     end
-    if roster.unknown and not advanced.includeUnknown then return false end
+    if roster.unknown then return false end
     return true
 end
 
@@ -570,12 +574,9 @@ local function UpdateAdvancedControls()
     for field, button in pairs(advancedCheckButtons) do
         button:SetChecked(advanced[field] == true)
     end
-    if advancedPlaystyleDropdown then
-        for _, option in ipairs(ADVANCED_PLAYSTYLES) do
-            if option[1] == (advanced.playstyle or 0) then
-                advancedPlaystyleDropdown:OverrideText(option[2]); break
-            end
-        end
+    for playstyle, button in pairs(advancedPlaystyleButtons) do
+        button:SetChecked(type(advanced.excludedPlaystyles) == "table"
+            and advanced.excludedPlaystyles[playstyle] == true or false)
     end
     if advancedMaxMembersDropdown then
         for _, option in ipairs(ADVANCED_MAX_MEMBERS) do
@@ -674,6 +675,13 @@ local function SaveClassExclusion(token, checked)
     RebuildVisibleResults(true)
 end
 
+local function SavePlaystyleExclusion(playstyle, checked)
+    if not db then return end
+    db.advanced.excludedPlaystyles[playstyle] = checked == true or nil
+    UpdateAdvancedControls()
+    RebuildVisibleResults(true)
+end
+
 local function SaveFilter(field, checked)
     if not db then return end
     db.filters[field] = not not checked
@@ -683,7 +691,7 @@ end
 local function ResetFilters()
     if not db then return end
     db.filters = {}
-    db.advanced = {excludedClasses = {}, playstyle = 0, maxMembers = 0}
+    db.advanced = {excludedClasses = {}, excludedPlaystyles = {}, maxMembers = 0}
     state.rosterClassCache = {}
     UpdateFilterButtons()
     RebuildVisibleResults(true)
@@ -1284,11 +1292,12 @@ local function CreateWindow()
     local visibleIndex = 0
     for _, option in ipairs(CLASS_OPTIONS) do
         local token, english = option[1], option[2]
-        local hasClass = type(CLASS_ICON_TCOORDS) ~= "table"
-            or type(CLASS_ICON_TCOORDS[token]) == "table"
-        if hasClass then
-            local label = type(LOCALIZED_CLASS_NAMES_MALE) == "table"
-                and LOCALIZED_CLASS_NAMES_MALE[token] or english
+        -- The UI must show only Forever's nine classes. Retail class icon
+        -- tables can contain Death Knight, Monk, Demon Hunter and Evoker.
+        local label = type(LOCALIZED_CLASS_NAMES_MALE) == "table"
+            and LOCALIZED_CLASS_NAMES_MALE[token] or english
+        if type(label) ~= "string" or label == "" then label = english end
+        do
             local col = visibleIndex % 2
             local rowNum = math.floor(visibleIndex / 2)
             local button = CreateFrame("CheckButton", nil, advancedPanel, "UICheckButtonTemplate")
@@ -1304,27 +1313,29 @@ local function CreateWindow()
         end
     end
     MakeLabel(advancedPanel,
-        "Class filters require a readable roster. Unknown groups are hidden by default.",
-        "GameFontHighlightSmall", 16, -277, 339, 37)
-    MakeLabel(advancedPanel, "Playstyle:", "GameFontNormalSmall", 16, -325, 90, 21)
-    advancedPlaystyleDropdown = CreateFrame("DropdownButton", nil,
-        advancedPanel, "WowStyle1DropdownTemplate")
-    advancedPlaystyleDropdown:SetWidth(215)
-    advancedPlaystyleDropdown:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT", 128, -320)
-    advancedPlaystyleDropdown:SetupMenu(function(_, root)
-        root:SetTag("MENU_FOREVER_QUICKJOIN_ADVANCED_PLAYSTYLE")
-        for _, option in ipairs(ADVANCED_PLAYSTYLES) do
-            local id, label = option[1], option[2]
-            root:CreateRadio(label,
-                function(key) return db and db.advanced.playstyle == key end,
-                function(key) SaveAdvanced("playstyle", key) end, id)
-        end
-    end)
-    MakeLabel(advancedPanel, "Max members:", "GameFontNormalSmall", 16, -365, 108, 21)
+        "Class exclusions require a readable roster; unknown rosters are hidden.",
+        "GameFontHighlightSmall", 16, -211, 339, 34)
+    MakeLabel(advancedPanel, "Exclude these playstyles:",
+        "GameFontNormalSmall", 16, -250, 332, 19)
+    for i, option in ipairs(ADVANCED_PLAYSTYLES) do
+        local id, label = option[1], option[2]
+        local col = (i - 1) % 2
+        local rowNum = math.floor((i - 1) / 2)
+        local button = CreateFrame("CheckButton", nil, advancedPanel, "UICheckButtonTemplate")
+        button:SetSize(22, 22)
+        button:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT",
+            15 + col * 169, -274 - rowNum * 29)
+        MakeLabel(button, label, "GameFontHighlightSmall", 24, -2, 137, 21)
+        button:SetScript("OnClick", function(self)
+            SavePlaystyleExclusion(id, self:GetChecked())
+        end)
+        advancedPlaystyleButtons[id] = button
+    end
+    MakeLabel(advancedPanel, "Max members:", "GameFontNormalSmall", 16, -351, 108, 21)
     advancedMaxMembersDropdown = CreateFrame("DropdownButton", nil,
         advancedPanel, "WowStyle1DropdownTemplate")
     advancedMaxMembersDropdown:SetWidth(215)
-    advancedMaxMembersDropdown:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT", 128, -360)
+    advancedMaxMembersDropdown:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT", 128, -346)
     advancedMaxMembersDropdown:SetupMenu(function(_, root)
         root:SetTag("MENU_FOREVER_QUICKJOIN_ADVANCED_SIZE")
         for _, option in ipairs(ADVANCED_MAX_MEMBERS) do
@@ -1342,12 +1353,11 @@ local function CreateWindow()
         button:SetScript("OnClick", function(self) SaveAdvanced(field, self:GetChecked()) end)
         advancedCheckButtons[field] = button
     end
-    AdvancedCheck("whisperable", "Only groups I can whisper", -401)
-    AdvancedCheck("hasNotes", "Only groups with descriptions", -431)
-    AdvancedCheck("includeUnknown", "Include groups with unreadable rosters", -461)
+    AdvancedCheck("whisperable", "Only groups I can whisper", -394)
+    AdvancedCheck("hasNotes", "Only groups with descriptions", -426)
     local clearAdvanced = CreateFrame("Button", nil, advancedPanel, "UIPanelButtonTemplate")
     clearAdvanced:SetSize(135, 23)
-    clearAdvanced:SetPoint("TOPRIGHT", advancedPanel, "TOPRIGHT", -15, -491)
+    clearAdvanced:SetPoint("TOPRIGHT", advancedPanel, "TOPRIGHT", -15, -480)
     clearAdvanced:SetText("Clear All Filters")
     clearAdvanced:SetScript("OnClick", ResetFilters)
     advancedPanel:Hide()
@@ -1694,10 +1704,24 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
         if type(db.advanced.excludedClasses) ~= "table" then
             db.advanced.excludedClasses = {}
         end
-        if type(db.advanced.playstyle) ~= "number"
-            or db.advanced.playstyle < 0 or db.advanced.playstyle > 4 then
-            db.advanced.playstyle = 0
+        -- Remove obsolete retail classes and retired controls from saved data.
+        local validClasses = {}
+        for _, option in ipairs(CLASS_OPTIONS) do validClasses[option[1]] = true end
+        for token in pairs(db.advanced.excludedClasses) do
+            if not validClasses[token] then db.advanced.excludedClasses[token] = nil end
         end
+        if type(db.advanced.excludedPlaystyles) ~= "table" then
+            db.advanced.excludedPlaystyles = {}
+        end
+        for id, checked in pairs(db.advanced.excludedPlaystyles) do
+            if type(id) ~= "number" or id < 1 or id > 4 or checked ~= true then
+                db.advanced.excludedPlaystyles[id] = nil
+            end
+        end
+        -- The old playstyle picker INCLUDED one style. Do not invert its meaning:
+        -- discard that obsolete selection rather than silently excluding it.
+        db.advanced.playstyle = nil
+        db.advanced.includeUnknown = nil
         if type(db.advanced.maxMembers) ~= "number"
             or db.advanced.maxMembers < 0 or db.advanced.maxMembers > 40 then
             db.advanced.maxMembers = 0
@@ -1709,7 +1733,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
     elseif event == "PLAYER_LOGIN" then
         CreateMinimapButton()
         SyncDefaultForParty()
-        Print("v0.6.5 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        Print("v0.6.6 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
