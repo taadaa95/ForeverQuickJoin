@@ -9,24 +9,34 @@
 - Search Blizzard's Group Finder directly by category and activity.
 - See each group's activity, playstyle, size, and Blizzard tank/healer/DPS icons.
 - Expand a group to inspect available member names, classes, levels, roles, specializations, and areas. Right-click a named member to prepare a manual `/who` query when their area is unknown.
-- Keep the large **Party detected** panel visible in both Find Groups and List Group, with an obvious **Review / Fix Roles** or **Change Roles** button.
-- Use **Advanced Filters** for *all* finder options: Show all level ranges, sorting by member count, Space for Tank/Healer/DPS, Already has Tank/Healer, class and playstyle exclusions, size, description, and whisperability.
+- Keep the **large Party detected** panel visible while browsing or hosting, with a one-click **Review / Fix Roles** or **Change Roles** button.
+- Open **Advanced Filters** to configure *all* finder options: Show all level ranges, sort by group size, Space for Tank/Healer/DPS, Already has Tank/Healer, excluded classes and playstyles, group size, and whisperability/description restrictions.
 - Click **Whisper to Join** to contact a group leader using your saved message.
+- Contacted listings display a distinct **green Sent** label beneath the leader's name. Sent groups remain pinned at the top even after searching other activities or changing filters. If the client stops exposing a listing, QuickJoin keeps a **Sent (cached)** row with the Whisper button disabled until it can verify the listing again. A confirmed delisting or a new listing with a different creation time clears the marker. **Sent means the whisper was submitted from QuickJoin, not that the recipient received or read it.**
 
 ### Party Roles
 
-A larger **Party detected** panel occupies the area below Search in **both** QuickJoin tabs. It displays the Tank / Healer / DPS counts using large Blizzard role icons, plus any unassigned members. Select **Review / Fix Roles** when QuickJoin flags uncertain assignments, or **Change Roles** at any time.
+A large, persistent **Party detected** panel appears in the area below Search on **both** Find Groups and List Group. It shows current Tank / Healer / DPS totals with large Blizzard role icons, plus any unassigned members. **Review / Fix Roles** appears when confirmation is needed; otherwise, **Change Roles** opens the editor.
 
 - QuickJoin detects party and raid members and reads Blizzard-assigned roles, names, classes, and levels.
 - DPS assignments for multi-role classes (such as a Priest) are **flagged for review**, not assumed to be correct. An unavailable role is **Unknown**, not guessed from class.
-- In **Party Role Manager**, choose **Tank**, **Healer**, or **DPS** for each member. A large icon beside the character reflects the chosen role. **Confirm detected roles** affirms known assignments; **Auto** or **Reset to WoW** discards overrides. Unknown roles must be assigned a valid role before confirmation.
-- Corrections immediately update the role counts and the `{role}` / `{party}` whisper placeholders. QuickJoin requires uncertain roles to be reviewed before sending a group-composition whisper; the one-time bypass has been removed.
+- In **Party Role Manager**, choose **Tank**, **Healer**, or **DPS** for each member. The selected role has a large Blizzard icon next to the character; unassigned roles must be resolved. Use **Confirm detected roles** to affirm known assignments, or **Auto** / **Reset to WoW** to discard manual corrections.
+- Corrections immediately update the role counts and the `{role}` / `{party}` whisper placeholders. If a group whisper contains uncertain roles, QuickJoin opens the manager and requires you to confirm them first; there is no bypass button.
 - Corrections are **local to your current group session**. They are cleared when the group disbands or a member leaves, and flagged for review if Blizzard's assignment changes. They do **not** edit other players' roles in WoW or require other players to install the addon.
 - Open the manager directly with `/qj roles` or `/qj party`.
 
 ### List Group / Applicant Inbox
 
 Use **Open Blizzard Listing** to create and manage your listing in Blizzard's protected UI. QuickJoin collects incoming whispers in a separate, session-only inbox, grouped by self-reported Tank, Healer, DPS, or Unknown role. Select an applicant to see their conversation and known class/level details. Reply, invite, decline, dismiss, or prepare a manual `/who` lookup.
+
+## Interface themes
+
+Select **Forever** or **Modern** using the **Theme** controls at the top of either QuickJoin tab.
+
+- **Forever** is the original WoW Forever-inspired interface: Blizzard borders, buttons, and typography.
+- **Modern** uses flat opaque charcoal/slate surfaces, subtle teal accents, more contemporary button styling, and Blizzard's bundled narrow font. It is inspired by clean WoW UI suites such as ElvUI/Ellesmere; it does not require them or copy their assets.
+
+Switching is **instant**: no `/reload` required. Your choice is saved per character. Theme changes apply to Find Groups, Advanced Filters, expanded rosters, the Party Role Manager, and the applicant inbox. Only QuickJoin's own windows are styled; Blizzard's Group Finder and other addons are not modified.
 
 ## Whisper messages
 
@@ -63,4 +73,4 @@ For manual installation, download a release from [GitHub Releases](https://githu
 - Blizzard controls search, listing creation, whispers, invites, and who-queries. Protected actions cannot be run automatically in the background; listing creation occurs in Blizzard's own window.
 - Player details may be withheld by the client. Missing specs, roles, or locations are shown as unknown; `/who` requires you to submit the prepared query yourself.
 - Party role confirmations are **not talent/spec detection**. Verify the roles with your party; QuickJoin does not secretly inspect another player's build or alter their assigned group role.
-- The applicant inbox and party role overrides are session-only. Your filters, minimap position, and whisper template are saved per character.
+- The applicant inbox, party role overrides, and **Sent tracking** are session-only. Sent markers survive searches and filter changes, but are cleared on logout/reload. When a group is no longer included in the current server search, its cached Sent row is **not proof it is still available**; the client must explicitly confirm delisting for automatic removal. Your filters, theme, minimap position, and whisper template are saved per character.
