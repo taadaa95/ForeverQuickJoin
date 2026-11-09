@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.2 — 2026-11-09
+
+- Restored Blizzard's original 19×19-pixel role icons in the permanent party summary and each Party Role Manager member row.
+- Role icons now display at their native size without enlargement or reduction.
+- All other party management, group finder, hosting, filters, Sent status and themes remain unchanged.
+
 ## 0.7.1 — 2026-11-09
 
 - Removed **Confirm detected roles** and **Reset to WoW** from the Party Role Manager, retaining per-player Tank/Healer/DPS and Auto actions.
