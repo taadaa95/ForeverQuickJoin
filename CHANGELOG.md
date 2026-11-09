@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.4 — 2026-11-09
+
+- Added **Ignore team composition** to Advanced Filters for unconventional dungeon/raid groups (e.g. four DPS or four tanks).
+- When enabled, bypasses QuickJoin's local **Space for Tank/Healer/DPS** and **Already has Tank/Healer** requirements. Saved role choices stay intact but appear dimmed and disabled until the toggle is turned off.
+- All other filters, including class/playstyle exclusions and group-size restrictions, continue to apply. The setting persists per character and **Clear All Filters** resets it.
+- Does not override WoW Forever's protected search API or any server-side listing restrictions.
+- Added Lua 5.1 regression tests for unconventional compositions, preservation of unrelated filters, and clearing the override.
+
 ## 0.7.3 — 2026-11-09
 
 - Added **My Applications**, a third tab for contacted group leaders. Tracks QuickJoin-sent whispers, manual follow-up whispers, matching incoming replies, and unread conversations for the current session only.
