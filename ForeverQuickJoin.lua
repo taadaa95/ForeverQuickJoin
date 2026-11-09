@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.6.9 -- consolidated filters and larger party roles panel.
+-- Forever QuickJoin 0.7.0 -- persistent sent listing markers and live-switchable themes.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
@@ -54,8 +54,141 @@ local state = {
     whisperBlocked = false,
     pendingWho = nil,
     whoZones = {}, -- session-only Who results, keyed by player identity
+    sentByID = {}, -- session-only attempted whispers by search result id
+    sentByListing = {}, -- keep sent markers across refreshed search result IDs
+    sentVirtualIDs = {}, -- virtual cached rows for sent groups absent from new search scopes
+    pinnedRealIDs = {}, -- live sent groups bypass local filters and stay visible
+    nextSentVirtualID = -1,
 }
 local lastWhisperTarget, lastWhisperTime
+local Readable -- declared early for the sent-listing identity helpers
+local UpdatePages -- shared by message sends and rendered search results
+
+-- A listing may receive a different result ID after a new search. The server
+-- does not expose a permanent listing GUID on every Forever client, so use the
+-- leader + activity + group title, optionally backed by the listing age.
+-- Never interpret a filtered-out or missing search result as a disbanded group.
+local function SentIdentity(id, info)
+    if type(info) ~= "table" then return nil end
+    local leader = Readable(info.leaderName)
+    local ids = Readable(info.activityIDs)
+    local activity = type(ids) == "table" and Readable(ids[1]) or Readable(info.activityID)
+    if type(leader) ~= "string" or leader == "" then return nil end
+    if type(activity) ~= "number" then activity = 0 end
+    return leader:lower() .. "\031" .. tostring(activity)
+end
+
+local function SentStartTime(info)
+    local age = type(info) == "table" and Readable(info.age) or nil
+    if type(age) == "number" and age >= 0 and age < 604800 and type(GetTime) == "function" then
+        return GetTime() - age
+    end
+end
+
+local function RemoveSent(record)
+    if not record then return end
+    for id,other in pairs(state.sentByID) do
+        if other == record then state.sentByID[id] = nil end
+    end
+    if record.virtualID then state.sentVirtualIDs[record.virtualID] = nil end
+    for id in pairs(state.pinnedRealIDs) do
+        if state.sentByID[id] == nil then state.pinnedRealIDs[id] = nil end
+    end
+    if record.key and state.sentByListing[record.key] == record then state.sentByListing[record.key] = nil end
+end
+
+local function MatchSent(id, info)
+    if type(info) ~= "table" then return nil end
+    if Readable(info.isDelisted) == true and state.sentByID[id] then
+        RemoveSent(state.sentByID[id])
+        return nil
+    end
+    local key = SentIdentity(id, info)
+    local record = state.sentByID[id]
+    if record and record.key ~= key then record = nil end
+    if not record and key then record = state.sentByListing[key] end
+    if not record then return nil end
+    -- A matching leader can make a *new* group with the same activity/title.
+    -- Its age will reset; do not mark that brand-new listing as contacted.
+    local started = SentStartTime(info)
+    if record.started and started and math.abs(record.started - started) > 90 then
+        RemoveSent(record)
+        return nil
+    end
+    if Readable(info.isDelisted) == true then
+        RemoveSent(record)
+        return nil
+    end
+    state.sentByID[id] = record
+    record.id = id
+    return record
+end
+
+local function SnapshotSentInfo(info, id)
+    local snapshot = {}
+    for _,field in ipairs({"leaderName","numMembers","name","comment","generalPlaystyle",
+        "isDelisted","hasSelf","age"}) do
+        local value = Readable(info[field])
+        if type(value)=="string" or type(value)=="number" or type(value)=="boolean" then
+            snapshot[field] = value
+        end
+    end
+    local activities = Readable(info.activityIDs)
+    snapshot.activityIDs = {}
+    if type(activities)=="table" then
+        for i=1,math.min(#activities,20) do
+            local activity = Readable(activities[i])
+            if type(activity)=="number" then table.insert(snapshot.activityIDs,activity) end
+        end
+    end
+    if #snapshot.activityIDs==0 and type(Readable(info.activityID))=="number" then
+        snapshot.activityIDs[1]=Readable(info.activityID)
+    end
+    if C_LFGList and type(C_LFGList.GetSearchResultMemberCounts)=="function" then
+        local ok,counts=pcall(C_LFGList.GetSearchResultMemberCounts,id)
+        counts=ok and Readable(counts) or nil
+        if type(counts)=="table" then
+            snapshot.roleCounts={}
+            for _,role in ipairs({"TANK","HEALER","DAMAGER"}) do
+                if type(Readable(counts[role]))=="number" then
+                    snapshot.roleCounts[role]=Readable(counts[role])
+                end
+            end
+        end
+    end
+    snapshot._qjCached=true
+    return snapshot
+end
+
+local function MarkSent(id, info, leader)
+    local key = SentIdentity(id, info)
+    if not key then return end
+    local old = state.sentByListing[key]
+    if old then RemoveSent(old) end
+    local virtualID=state.nextSentVirtualID
+    state.nextSentVirtualID=virtualID-1
+    local record = { id = id, key = key, leader = leader, virtualID=virtualID,
+        snapshot=SnapshotSentInfo(info,id),
+        started = SentStartTime(info), at = type(GetTime) == "function" and GetTime() or 0 }
+    state.sentVirtualIDs[virtualID]=record
+    state.pinnedRealIDs[id] = true
+    state.sentByID[id] = record
+    state.sentByListing[key] = record
+end
+
+local function ResultInfo(id)
+    -- Negative IDs never go to Blizzard's APIs. They represent the last
+    -- known snapshot of a sent group whose current search scope omits it.
+    if type(id)=="number" and id<0 then
+        local rec=state.sentVirtualIDs[id]
+        return rec and rec.snapshot or nil, false
+    end
+    if not C_LFGList or type(C_LFGList.GetSearchResultInfo)~="function" then
+        return nil,false
+    end
+    local ok,info=pcall(C_LFGList.GetSearchResultInfo,id)
+    return ok and Readable(info) or nil, ok and type(Readable(info))=="table"
+end
 
 local function Print(msg)
     if DEFAULT_CHAT_FRAME then
@@ -65,7 +198,7 @@ end
 
 -- Since Forever 1.60.1, the search-result APIs can return *secret* values
 -- during chat-messaging lockdown. Do not compare/format/index these values.
-local function Readable(value)
+Readable = function(value)
     if type(canaccessvalue) == "function" and not canaccessvalue(value) then
         return nil
     end
@@ -382,7 +515,9 @@ local function SendWhisper(resultID)
     state.whisperAttemptActive = false
     if state.whisperBlocked then return end
     lastWhisperTarget, lastWhisperTime = name, now
-    Status("Whisper attempted to " .. name .. ". Check chat for delivery.")
+    MarkSent(resultID, info, name)
+    if UpdatePages and window and window:IsShown() then UpdatePages() end
+    Status("Whisper submitted to " .. name .. " (Sent marks submission, not confirmed delivery).")
 end
 
 -- Group composition from the same role-count API used by Blizzard's Browse
@@ -394,7 +529,12 @@ local function GroupComposition(resultID, info)
     if not C_LFGList or type(C_LFGList.GetSearchResultMemberCounts) ~= "function" then
         return total .. " players  |  roles unavailable"
     end
-    local ok, counts = pcall(C_LFGList.GetSearchResultMemberCounts, resultID)
+    local ok, counts
+    if info and info._qjCached then
+        ok,counts=true,info.roleCounts
+    else
+        ok,counts=pcall(C_LFGList.GetSearchResultMemberCounts, resultID)
+    end
     counts = ok and Readable(counts) or nil
     if type(counts) ~= "table" then
         return total .. " players  |  roles unavailable"
@@ -625,15 +765,17 @@ local function UpdateFilterButtons()
     end
 end
 
-local UpdatePages
 local function RebuildVisibleResults(resetPage)
     if not db then return end
     local out = {}
     for index, id in ipairs(state.cachedResults) do
-        local ok, info = pcall(C_LFGList.GetSearchResultInfo, id)
-        if ok and type(Readable(info)) == "table" then
+        local info,verified=ResultInfo(id)
+        local pinned=(not verified and type(id)=="number" and id<0)
+            or state.pinnedRealIDs[id] == true
+        if type(Readable(info)) == "table" then
             local count = Readable(info.numMembers)
             local removed = Readable(info.isDelisted)
+            if removed == true then MatchSent(id, info) end
             local ids = Readable(info.activityIDs)
             local match = state.categoryID == nil and state.activityID == nil
             if type(ids) == "table" then
@@ -648,17 +790,19 @@ local function RebuildVisibleResults(resetPage)
                     end
                 end
             end
-            if match and removed ~= true
+            if (pinned or match) and removed ~= true
                 and (count == nil or (type(count) == "number" and count >= 1))
-                and PassesRoleFilters(id, info)
-                and PassesAdvancedFilters(id, info) then
-                table.insert(out, {id=id, count=type(count)=="number" and count or nil, original=index})
+                and (pinned or (PassesRoleFilters(id, info)
+                    and PassesAdvancedFilters(id, info))) then
+                table.insert(out, {id=id, count=type(count)=="number" and count or nil,
+                    original=index,pinned=pinned})
             end
         end
     end
     local order = db.sortOrder
     if order == "asc" or order == "desc" then
         table.sort(out, function(a,b)
+            if a.pinned ~= b.pinned then return a.pinned end
             if a.count == nil and b.count == nil then return a.original < b.original end
             if a.count == nil then return false end
             if b.count == nil then return true end
@@ -666,6 +810,11 @@ local function RebuildVisibleResults(resetPage)
                 if order == "asc" then return a.count < b.count end
                 return a.count > b.count
             end
+            return a.original < b.original
+        end)
+    else
+        table.sort(out,function(a,b)
+            if a.pinned ~= b.pinned then return a.pinned end
             return a.original < b.original
         end)
     end
@@ -959,12 +1108,12 @@ UpdatePages = function()
             row:Hide()
         else
             row:Show()
-            local ok, info = pcall(C_LFGList.GetSearchResultInfo, resultID)
-            info = ok and Readable(info) or nil
+            local info,verified = ResultInfo(resultID)
             if type(info) ~= "table" then
                 row.label:SetText("Expired listing")
                 row.activity:SetText("")
                 row.playstyle:SetText("")
+                row.sentBadge:SetText("")
                 row.composition:SetText("")
                 row.whisper:Disable()
                 row.expand:Disable()
@@ -977,12 +1126,16 @@ UpdatePages = function()
                 local displayName = type(name) == "string" and name ~= "" and name or "Leader hidden"
                 row.label:SetText(Truncate(displayName, 21))
                 row.activity:SetText(Truncate(activity, 33))
+                local sent = (not verified and state.sentVirtualIDs[resultID] ~= nil)
+                    or MatchSent(resultID, info) ~= nil
                 row.playstyle:SetText("Playstyle: " .. Truncate(ResultPlaystyle(info), 23))
+                row.sentBadge:SetText(sent and ("|cff45df87Sent|r"
+                    .. (not verified and " |cffaaaaaa(cached)|r" or "")) or "")
                 row.composition:SetText(GroupComposition(resultID, info))
-                row.whisper:SetEnabled(type(name) == "string" and name ~= ""
+                row.whisper:SetEnabled(verified and type(name) == "string" and name ~= ""
                     and type(members) == "number" and members >= 1 and not removed and own == false)
-                row.expand:SetEnabled(removed ~= true)
-                if state.expandedResultID == resultID and removed ~= true then
+                row.expand:SetEnabled(verified and removed ~= true)
+                if verified and state.expandedResultID == resultID and removed ~= true then
                     row.expandLabel:SetText("-")
                     row:SetHeight(34 + PopulateMemberDetails(row, resultID, info))
                 end
@@ -991,6 +1144,9 @@ UpdatePages = function()
         end
     end
     resultsCanvas:SetHeight(math.max(315, offset))
+    if ForeverQuickJoinTheme and ForeverQuickJoinTheme.ApplyNew then
+        ForeverQuickJoinTheme.ApplyNew()
+    end
     -- Keep scroll position in range when collapsing an entry or changing pages.
     local maxScroll = math.max(0, resultsCanvas:GetHeight() - resultsViewport:GetHeight())
     resultsViewport:SetVerticalScroll(math.min(resultsViewport:GetVerticalScroll(), maxScroll))
@@ -1045,9 +1201,43 @@ local function RefreshResults()
     end
     state.cachedResults = {}
     state.rosterClassCache = {}
+    state.pinnedRealIDs = {}
+    local found={}
     for _, id in ipairs(ids) do
         if type(Readable(id)) == "number" then
             table.insert(state.cachedResults, id)
+            local info,verified=ResultInfo(id)
+            if verified then
+                local rec=MatchSent(id,info)
+                if rec then
+                    found[rec]=true
+                    state.pinnedRealIDs[id]=true
+                    -- The new live result is preferable to its older snapshot.
+                    rec.snapshot=SnapshotSentInfo(info,id)
+                end
+            end
+        end
+    end
+    -- Search results are scoped and often capped; a missing record is NOT proof
+    -- of disbanding. Keep a cached Sent row until the client confirms delisting
+    -- or reports a new listing with a different creation time.
+    for _,rec in pairs(state.sentByListing) do
+        if not found[rec] and rec.snapshot then
+            local info,verified=ResultInfo(rec.id)
+            if verified then
+                if info.isDelisted==true then
+                    RemoveSent(rec)
+                elseif SentIdentity(rec.id,info)==rec.key then
+                    found[rec]=true
+                    state.pinnedRealIDs[rec.id]=true
+                    state.cachedResults[#state.cachedResults+1]=rec.id
+                    rec.snapshot=SnapshotSentInfo(info,rec.id)
+                else
+                    state.cachedResults[#state.cachedResults+1]=rec.virtualID
+                end
+            else
+                state.cachedResults[#state.cachedResults+1]=rec.virtualID
+            end
         end
     end
     state.totalInCache = #state.cachedResults
@@ -1531,9 +1721,19 @@ local function CreateWindow()
                 resultsViewport:SetVerticalScroll(math.min(row.topOffset or 0, maxScroll))
             end
         end)
-        row.expand:SetScript("OnEnter", function() row:SetBackdropColor(0.17, 0.20, 0.27, 1) end)
-        row.expand:SetScript("OnLeave", function() row:SetBackdropColor(0.10, 0.12, 0.16, 1) end)
-        row.label = MakeLabel(row, "", "GameFontHighlightSmall", 26, -8, 153, 22)
+        row.expand:SetScript("OnEnter", function()
+            if ForeverQuickJoinTheme and ForeverQuickJoinTheme.RowHover then
+                ForeverQuickJoinTheme.RowHover(row, true)
+            else row:SetBackdropColor(0.17, 0.20, 0.27, 1) end
+        end)
+        row.expand:SetScript("OnLeave", function()
+            if ForeverQuickJoinTheme and ForeverQuickJoinTheme.RowHover then
+                ForeverQuickJoinTheme.RowHover(row, false)
+            else row:SetBackdropColor(0.10, 0.12, 0.16, 1) end
+        end)
+        row.label = MakeLabel(row, "", "GameFontHighlightSmall", 26, -1, 153, 16)
+        -- Dedicated badge avoids squeezing Sent into long playstyle text.
+        row.sentBadge = MakeLabel(row, "", "GameFontNormalSmall", 26, -18, 155, 15)
         row.activity = MakeLabel(row, "", "GameFontHighlightSmall", 187, -2, 225, 16)
         row.playstyle = MakeLabel(row, "", "GameFontHighlightSmall", 187, -18, 225, 14)
         row.playstyle:SetTextColor(0.72, 0.88, 0.72)
@@ -1643,6 +1843,11 @@ local function CreateWindow()
     window.QuickJoinStatus = Status
     if ForeverQuickJoinParty and ForeverQuickJoinParty.Attach then
         ForeverQuickJoinParty.Attach(window)
+    end
+    -- Theme module is intentionally loaded last and can restyle all existing
+    -- host/party frames without reload or recreating protected UI controls.
+    if ForeverQuickJoinTheme and ForeverQuickJoinTheme.Attach then
+        ForeverQuickJoinTheme.Attach(window, advancedPanel, rows)
     end
     window:Hide()
     UpdatePages()
@@ -1871,7 +2076,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
     elseif event == "PLAYER_LOGIN" then
         CreateMinimapButton()
         SyncDefaultForParty()
-        Print("v0.6.9 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        Print("v0.7.0 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
@@ -1907,6 +2112,8 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
     elseif event == "LFG_LIST_SEARCH_RESULT_UPDATED" then
         if type(Readable(arg)) == "number" then
             state.rosterClassCache[arg] = nil
+            local ok, info = pcall(C_LFGList.GetSearchResultInfo, arg)
+            if ok and type(Readable(info)) == "table" then MatchSent(arg, info) end
         else
             state.rosterClassCache = {}
         end
