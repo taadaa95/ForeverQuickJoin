@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.6.0 - independent listing management and applicant inbox.
+-- Forever QuickJoin 0.6.1 - native Blizzard listing handoff and applicant inbox.
 -- Whisper history is session-only; no private message contents go to SavedVariables.
 local addonName = ...
 local Host = {}
@@ -16,14 +16,12 @@ local MAX_APPLICANTS, MAX_MESSAGES, ROWS_PER_PAGE = 100, 35, 10
 local DENIAL = "Sorry, we can't take you for this group. Good luck!"
 local applicants, byName, selected = {}, {}, nil
 local inboxPage, missedProtected = 1, 0
-local panel, window, findTab, hostTab, listingButton, delistButton
-local categoryDropdown, activityDropdown, statusLabel, inboxLabel, profileLabel, detailLabel, chatLog
+local panel, window, findTab, hostTab, listingButton
+local listingStatusLabel, statusLabel, inboxLabel, profileLabel, detailLabel, chatLog
 local queueRows, roleButtons = {}, {}
 local replyInput, replyButton, inviteButton, declineButton, dismissButton, whoButton
-local prevPage, nextPage, pageLabel, captureToggle, activityID, categoryID
-local categoryName, activityName, activeListing = nil, nil, false
-local listingAttempt, chatAttempt, chatBlocked = false, false, false
-local listingBlocked, categories, activities = false, {}, {}
+local prevPage, nextPage, pageLabel, captureToggle
+local chatAttempt, chatBlocked = false, false
 local lookingUp = nil
 
 local function Readable(value)
@@ -336,115 +334,47 @@ local function CurrentEntry()
     return ok and type(Readable(entry))=="table" and entry or nil
 end
 local function UpdateListingUI()
-    if not listingButton then return end
+    if not listingStatusLabel then return end
     local entry = CurrentEntry()
-    activeListing = entry ~= nil
-    listingButton:SetText(activeListing and "Update Listing" or "List Group")
-    listingButton:SetEnabled(activityID ~= nil and not listingBlocked)
-    delistButton:SetEnabled(activeListing)
-    if activeListing then
-        local ids = Readable(entry.activityIDs)
-        local currentID = type(ids)=="table" and Readable(ids[1]) or nil
-        if not activityID and type(currentID)=="number" then
-            activityID = currentID
-            if type(C_LFGList.GetActivityInfoTable)=="function" then
-                local ok, info=pcall(C_LFGList.GetActivityInfoTable,currentID)
-                if ok and type(info)=="table" then activityName=info.shortName or info.fullName or info.name end
-            end
-            if activityDropdown then activityDropdown:OverrideText(activityName or "Current listing") end
-            listingButton:SetEnabled(true)
-        end
-    end
-end
-local function RefreshActivityChoices()
-    if not categoryDropdown then return end
-    categories,activities = {},{}
-    if not C_LFGList or type(C_LFGList.GetAvailableCategories)~="function" then
-        Status("Group Finder activity API unavailable.");return
-    end
-    local ok, cats = pcall(C_LFGList.GetAvailableCategories)
-    if not ok or type(cats)~="table" then return end
-    for _,cat in ipairs(cats) do
-        local info = C_LFGList.GetLfgCategoryInfo and C_LFGList.GetLfgCategoryInfo(cat)
-        if info and Text(info.name) then
-            categories[#categories+1] = {id=cat,name=info.name}
-        end
-    end
-    local found=false
-    for _,cat in ipairs(categories) do if cat.id == categoryID then found=true end end
-    if not found then
-        categoryID=categories[1] and categories[1].id or nil
-        categoryName=categories[1] and categories[1].name or nil
-    end
-    if categoryID and C_LFGList.GetAvailableActivities then
-        local okA, ids = pcall(C_LFGList.GetAvailableActivities, categoryID)
-        if okA and type(ids)=="table" then
-            for _,id in ipairs(ids) do
-                if type(Readable(id))=="number" then
-                    local info = C_LFGList.GetActivityInfoTable and C_LFGList.GetActivityInfoTable(id)
-                    local name = info and (info.shortName or info.fullName or info.name)
-                    local level = type(UnitLevel)=="function" and UnitLevel("player") or nil
-                    local low, high = info and info.minLevelSuggestion or 0,
-                        info and info.maxLevelSuggestion or 0
-                    local inRange = not level or (level >= (low or 0) and ((high or 0)==0 or level<=high))
-                    if info and (inRange or (ForeverQuickJoinDB and ForeverQuickJoinDB.allLevels)) then
-                        activities[#activities+1] = {id=id,name=name or ("Activity "..id)}
-                    end
-                end
-            end
-        end
-    end
-    table.sort(activities,function(a,b) return a.name:lower()<b.name:lower() end)
-    local selectedFound=false
-    for _,a in ipairs(activities) do if a.id==activityID then selectedFound=true end end
-    if not selectedFound then activityID,activityName=nil,nil end
-    categoryDropdown:OverrideText(categoryName or "Category")
-    activityDropdown:OverrideText(activityName or "Choose activity")
-    UpdateListingUI()
-end
-local function TryList()
-    if not activityID then Status("Choose an activity before listing."); return end
-    if listingBlocked then Status("Listing API blocked; re-open or /reload to retry."); return end
-    if not C_LFGList then Status("Group Finder API unavailable.");return end
-    local fn = CurrentEntry() and C_LFGList.UpdateListing or C_LFGList.CreateListing
-    if type(fn)~="function" then Status("Listing API unavailable."); return end
-    -- Restricted listing operations must be initiated by this physical click.
-    -- Some clients require the activity's prebuilt title before creation.
-    listingAttempt = true
-    if type(C_LFGList.SetEntryTitle) == "function" then
-        local info = type(C_LFGList.GetActivityInfoTable) == "function"
-            and C_LFGList.GetActivityInfoTable(activityID)
-        local groupID = type(info) == "table" and Readable(info.groupFinderActivityGroupID)
-        if type(groupID) == "number" then
-            C_LFGList.SetEntryTitle(activityID, groupID)
-        end
-    end
-    if listingBlocked then
-        listingAttempt = false
-        Status("WoW blocked listing setup. Try Blizzard's Create Group interface.")
+    if not entry then
+        listingStatusLabel:SetText("No active listing")
         return
     end
-    local success = fn({activityIDs={activityID}, isAutoAccept=false, isPrivateGroup=false})
-    listingAttempt = false
-    if listingBlocked then
-        Status("WoW blocked the listing. Use Blizzard's Create Group interface.")
-    elseif success == false then
-        Status("WoW refused the listing. Check eligibility in Blizzard Group Finder.")
-    else
-        Status("Listing request submitted. Waiting for game confirmation.")
+    local name = "active group"
+    local ids = Readable(entry.activityIDs)
+    local id = type(ids)=="table" and Readable(ids[1]) or nil
+    if type(id)=="number" and C_LFGList
+        and type(C_LFGList.GetActivityInfoTable)=="function" then
+        local ok, info = pcall(C_LFGList.GetActivityInfoTable,id)
+        if ok and type(Readable(info))=="table" then
+            name = Text(info.shortName) or Text(info.fullName)
+                or Text(info.name) or name
+        end
     end
-    UpdateListingUI()
+    listingStatusLabel:SetText("Active: "..name)
 end
-local function TryDelist()
-    if not activeListing then return end
-    if not C_LFGList or type(C_LFGList.RemoveListing)~="function" then
-        Status("Remove Listing API unavailable.");return
+-- Forever's listing APIs are restricted. Our custom CreateListing/UpdateListing
+-- button was blocked even after user interaction (ADDON_ACTION_BLOCKED), so
+-- do NOT invoke them here or call Blizzard's protected buttons via :Click().
+-- Instead, let Blizzard's own secure Listing tab execute those operations.
+local function OpenNativeListing()
+    if type(InCombatLockdown)=="function" and InCombatLockdown() then
+        Status("Blizzard's Listing tab cannot open during combat.")
+        return
     end
-    listingAttempt = true
-    C_LFGList.RemoveListing() -- button click only
-    listingAttempt = false
-    Status("Requested delisting. Waiting for game confirmation.")
-    UpdateListingUI()
+    if type(LFGVanilla_ToggleFrame)~="function" then
+        if type(GroupFinderVanillaStyle_LoadUI)=="function" then
+            GroupFinderVanillaStyle_LoadUI()
+        end
+    end
+    if type(LFGVanilla_ToggleFrame)~="function" then
+        Status("Blizzard Listing UI unavailable. Open the normal Group Finder instead.")
+        return
+    end
+    -- Native tab 1 = Listing; tab 2 = Browse; tab 3 = Who.
+    -- This matches the handoff used by LFG Forever's window.lua.
+    LFGVanilla_ToggleFrame(1)
+    if window and type(window.Hide)=="function" then window:Hide() end
 end
 local function ClearSelected()
     if not selected then return end
@@ -507,7 +437,7 @@ function Host.Attach(parent)
     hostTab = Button(window,"List Group",628,16,132,25,function()
         panel:Show()
         findTab:Enable();hostTab:Disable()
-        RefreshActivityChoices()
+        UpdateListingUI()
         Host.Redraw()
     end)
     findTab:Disable()
@@ -521,38 +451,11 @@ function Host.Attach(parent)
         edgeSize=20,insets={left=0,right=0,top=0,bottom=0}})
     panel:SetBackdropColor(.035,.045,.065,1)
     Label(panel,"LIST GROUP & APPLICANT INBOX",17,10,400,26,"GameFontNormalLarge")
-    categoryDropdown=CreateFrame("DropdownButton",nil,panel,"WowStyle1DropdownTemplate")
-    categoryDropdown:SetWidth(170)
-    categoryDropdown:SetPoint("TOPLEFT",panel,"TOPLEFT",15,-43)
-    categoryDropdown:SetDefaultText("Category")
-    categoryDropdown:SetupMenu(function(_,root)
-        root:SetTag("MENU_QJ_HOST_CATEGORY")
-        for _,cat in ipairs(categories) do
-            local id,name=cat.id,cat.name
-            root:CreateRadio(name,function(key) return categoryID==key end,function(key)
-                categoryID,categoryName,activityID,activityName=key,name,nil,nil
-                RefreshActivityChoices()
-            end,id)
-        end
-    end)
-    activityDropdown=CreateFrame("DropdownButton",nil,panel,"WowStyle1DropdownTemplate")
-    activityDropdown:SetWidth(315)
-    activityDropdown:SetPoint("LEFT",categoryDropdown,"RIGHT",8,0)
-    activityDropdown:SetDefaultText("Choose activity")
-    activityDropdown:SetupMenu(function(_,root)
-        root:SetTag("MENU_QJ_HOST_ACTIVITY")
-        for _,a in ipairs(activities) do
-            local id,name=a.id,a.name
-            root:CreateRadio(name,function(key) return activityID==key end,function(key)
-                activityID,activityName=key,name
-                activityDropdown:OverrideText(name)
-                UpdateListingUI()
-            end,id)
-        end
-    end)
-    listingButton=Button(panel,"List Group",513,43,112,26,TryList)
-    delistButton=Button(panel,"Delist",631,43,140,26,TryDelist)
-    statusLabel=Label(panel,"Choose an activity and List Group to advertise in Blizzard Group Finder.",17,78,780,24)
+    -- Creation, editing and removal happen in Blizzard's own secure Listing tab.
+    -- QuickJoin keeps its full applicant inbox and handles whispers/invites.
+    listingButton=Button(panel,"Open Blizzard Listing",15,43,211,27,OpenNativeListing)
+    listingStatusLabel=Label(panel,"No active listing",235,45,530,26,"GameFontHighlightSmall")
+    statusLabel=Label(panel,"Create, edit or delist in Blizzard; manage whispers and applicants here.",17,78,780,24)
     captureToggle=CreateFrame("CheckButton",nil,panel,"UICheckButtonTemplate")
     captureToggle:SetPoint("TOPLEFT",panel,"TOPLEFT",15,-111)
     captureToggle:SetSize(24,24)
@@ -641,7 +544,7 @@ function Host.Attach(parent)
     whoButton=Button(right,"Lookup /who",348,405,104,26,TryWho)
     Label(panel,"Roles from whisper text are self-reported. Confirm unknown roles manually; /who is user-initiated.",17,660,788,20)
     panel:Hide()
-    RefreshActivityChoices()
+    UpdateListingUI()
     Host.Redraw()
 end
 function Host.OpenList()
@@ -649,7 +552,7 @@ function Host.OpenList()
     window:Show()
     panel:Show()
     findTab:Enable();hostTab:Disable()
-    RefreshActivityChoices()
+    UpdateListingUI()
     Host.Redraw()
 end
 function Host.OpenFind()
@@ -676,17 +579,13 @@ watcher:SetScript("OnEvent",function(_,event,...)
     elseif event=="LFG_LIST_ACTIVE_ENTRY_UPDATE" then
         if panel then UpdateListingUI() end
     elseif event=="LFG_LIST_AVAILABILITY_UPDATE" then
-        if panel and panel:IsShown() then RefreshActivityChoices() end
+        if panel and panel:IsShown() then UpdateListingUI() end
     elseif event=="GROUP_ROSTER_UPDATE" then
         GroupMemberJoined()
     elseif (event=="ADDON_ACTION_BLOCKED" or event=="ADDON_ACTION_FORBIDDEN") then
         local blockedAddon, detail = ...
         if blockedAddon ~= addonName then return end
-        if listingAttempt then
-            listingBlocked=true
-            if listingButton then listingButton:Disable() end
-            Status("WoW blocked listing API. Use Blizzard's Create Group interface instead.")
-        elseif chatAttempt then
+        if chatAttempt then
             chatBlocked=true
             Status("WoW blocked the whisper; applicant remains in queue.")
         end
