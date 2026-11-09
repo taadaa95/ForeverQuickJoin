@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.6.6 -- Forever class list and exclusion-style playstyle filters.
+-- Forever QuickJoin 0.6.7 -- opt-in member /who area lookup, no automated searches.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
@@ -21,6 +21,8 @@ local ROLE_ICONS = {
 }
 local PAGE_SIZE = 9
 local COOLDOWN = 3
+-- /who zones are snapshots. Never display session-cached positions indefinitely.
+local WHO_ZONE_TTL = 300
 
 local db, window, categoryDropdown, activityDropdown, searchButton
 local sortDropdown, locationLabel, minimapButton, clearFilterButton, templateResetButton, allLevelsButton
@@ -50,6 +52,8 @@ local state = {
     searchActivityIDs = {},
     whisperAttemptActive = false,
     whisperBlocked = false,
+    pendingWho = nil,
+    whoZones = {}, -- session-only Who results, keyed by player identity
 }
 local lastWhisperTarget, lastWhisperTime
 
@@ -704,8 +708,46 @@ local function SetSort(order)
     RebuildVisibleResults(true)
 end
 
--- Only use native LFG data. Non-leader names, levels, specs and locations may
--- be withheld by the server; never initiate a /who or infer missing details.
+-- A member's zone is not guaranteed to be in the LFG listing. A right-click
+-- prepares a targeted /who; the player must press Enter. This avoids protected
+-- addon-driven Who requests and complies with the server's query cooldown.
+local function WhoNameKey(name)
+    name = Readable(name)
+    if type(name) ~= "string" or name == "" then return nil end
+    name = name:match("^%s*(.-)%s*$")
+    if name == "" or name:find('[|"\r\n]') then return nil end
+    return name:lower()
+end
+
+local function LookupMemberWho(name)
+    local key = WhoNameKey(name)
+    if not key then
+        Print("This member's name is not available; an individual /who lookup is not possible.")
+        return
+    end
+    if not ((ChatFrameUtil and type(ChatFrameUtil.OpenChat) == "function")
+        or type(ChatFrame_OpenChat) == "function") then
+        Print("The chat input is unavailable. Use Blizzard's Who tab manually.")
+        return
+    end
+    -- This controls result routing only, not the query itself. Without it,
+    -- small /who replies may appear solely in chat and not fire WHO_LIST_UPDATE.
+    -- It can also open Blizzard's Who window for the result.
+    if C_FriendList and type(C_FriendList.SetWhoToUi) == "function" then
+        pcall(C_FriendList.SetWhoToUi, true)
+    end
+    local cmd = '/who n-"' .. name .. '"'
+    state.pendingWho = {name=name, key=key, started=GetTime()}
+    if ChatFrameUtil and type(ChatFrameUtil.OpenChat) == "function" then
+        ChatFrameUtil.OpenChat(cmd)
+    else
+        ChatFrame_OpenChat(cmd)
+    end
+    Print("Prepared " .. cmd .. ". Press Enter to look up the location; /who can be throttled.")
+end
+
+-- Only use native LFG data or a successful, manually initiated WHO response.
+-- Unnamed players cannot be looked up; never guess a real identity.
 local function MemberDetails(resultID, index)
     local member = { index=index }
     if C_LFGList and type(C_LFGList.GetSearchResultPlayerInfo) == "function" then
@@ -735,6 +777,8 @@ local function MemberDetails(resultID, index)
             member.readable = type(member.role) == "string" or type(member.classFilename) == "string"
         end
     end
+    -- Preserve the actual returned name separately from the display fallback.
+    member.whoName = WhoNameKey(member.name) and member.name or nil
     if type(member.name) ~= "string" or member.name == "" then member.name = "Member " .. index end
     if type(member.level) ~= "number" or member.level < 1 then member.level = nil end
     if type(member.className) ~= "string" or member.className == "" then member.className = "Class unknown" end
@@ -742,6 +786,13 @@ local function MemberDetails(resultID, index)
     if type(member.specName) ~= "string" or member.specName == "" then member.specName = nil end
     if type(member.area) ~= "string" or member.area == "" then member.area = nil end
     if type(member.role) ~= "string" then member.role = "NONE" end
+    if not member.area and member.whoName then
+        local record = state.whoZones[WhoNameKey(member.whoName)]
+        if record and type(record.area) == "string" and GetTime() - record.at <= WHO_ZONE_TTL then
+            member.area = record.area
+            member.areaFromWho = true
+        end
+    end
     return member
 end
 
@@ -761,7 +812,7 @@ local function PopulateMemberDetails(row, resultID, info)
     local lines = math.ceil(n / 2)
     local height = introHeight + math.max(1, lines) * 45 + 8
     row.detail:SetHeight(height)
-    row.detailsTitle:SetText(("GROUP MEMBERS (%d)  ·  Class, level, role, spec and area when available"):format(n))
+    row.detailsTitle:SetText(("GROUP MEMBERS (%d)  ·  Right-click a named player to look up their area (/who)"):format(n))
     if showComment then
         row.detailsComment:SetText("Notes: " .. SafeMarkup(Truncate(comment, 114)))
         row.detailsComment:Show()
@@ -790,6 +841,22 @@ local function PopulateMemberDetails(row, resultID, info)
                 tile.subtitle:SetPoint("TOPLEFT", tile, "TOPLEFT", 29, -23)
                 tile.subtitle:SetSize(332, 17)
                 tile.subtitle:SetJustifyH("LEFT")
+                tile:EnableMouse(true)
+                tile:SetScript("OnMouseUp", function(self, button)
+                    if button == "RightButton" then LookupMemberWho(self.whoName) end
+                end)
+                tile:SetScript("OnEnter", function(self)
+                    if not GameTooltip then return end
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:AddLine(self.whoName and "Right-click: Look up player location" or
+                        "Player name is hidden; /who unavailable")
+                    if self.whoName then
+                        GameTooltip:AddLine("Prepares /who; press Enter to submit.", 0.8, 0.8, 0.8)
+                        GameTooltip:AddLine("Locations are WHO snapshots, not live tracking.", 0.7, 0.7, 0.7)
+                    end
+                    GameTooltip:Show()
+                end)
+                tile:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
                 row.memberTiles[index] = tile
             end
             tile:ClearAllPoints()
@@ -800,8 +867,10 @@ local function PopulateMemberDetails(row, resultID, info)
                 local leaderName = Readable(info.leaderName)
                 if type(leaderName) == "string" and leaderName ~= "" then
                     member.name = leaderName
+                    member.whoName = WhoNameKey(leaderName) and leaderName or nil
                 end
             end
+            tile.whoName = member.whoName
             local coords = type(CLASS_ICON_TCOORDS) == "table" and member.classFilename
                 and CLASS_ICON_TCOORDS[member.classFilename] or nil
             if type(coords) == "table" then
@@ -818,6 +887,7 @@ local function PopulateMemberDetails(row, resultID, info)
             local level = member.level and ("Lv" .. member.level) or "Lv?"
             local spec = member.specName
             local area = member.area or "Area unknown"
+            if member.areaFromWho then area = area .. " (via /who)" end
             -- Some Forever listings use className as a placeholder for specName.
             -- Do not show "Shaman · Shaman" or "Hunter · Hunter".
             if spec and spec:lower():match("^%s*(.-)%s*$")
@@ -903,6 +973,45 @@ UpdatePages = function()
     -- Keep scroll position in range when collapsing an entry or changing pages.
     local maxScroll = math.max(0, resultsCanvas:GetHeight() - resultsViewport:GetHeight())
     resultsViewport:SetVerticalScroll(math.min(resultsViewport:GetVerticalScroll(), maxScroll))
+end
+
+-- A Who result must uniquely identify the selected player; never assign an
+-- area just because a query matched a similar name or an unrelated result.
+local function MergeWhoLocation()
+    local request = state.pendingWho
+    if not request then return end
+    if GetTime() - request.started > 90 then
+        state.pendingWho = nil
+        return
+    end
+    if not C_FriendList or type(C_FriendList.GetNumWhoResults) ~= "function"
+        or type(C_FriendList.GetWhoInfo) ~= "function" then return end
+    local countOK, count = pcall(C_FriendList.GetNumWhoResults)
+    if not countOK or type(Readable(count)) ~= "number" then return end
+    local exact, partial, exactCount, partialCount = nil, nil, 0, 0
+    local expectedBase = request.key:match("^([^%-]+)") or request.key
+    for i = 1, math.min(50, count) do
+        local ok, who = pcall(C_FriendList.GetWhoInfo, i)
+        who = ok and Readable(who) or nil
+        if type(who) == "table" then
+            local name = WhoNameKey(who.fullName)
+            local area = Readable(who.area)
+            if name and type(area) == "string" and area ~= "" then
+                if name == request.key then
+                    exact, exactCount = area, exactCount + 1
+                elseif (name:match("^([^%-]+)") or name) == expectedBase
+                    and (not request.key:find("-", 1, true) or not name:find("-", 1, true)) then
+                    partial, partialCount = area, partialCount + 1
+                end
+            end
+        end
+    end
+    local zone = exactCount == 1 and exact or (exactCount == 0 and partialCount == 1 and partial or nil)
+    if not zone then return end
+    state.whoZones[request.key] = {area=zone, at=GetTime()}
+    state.pendingWho = nil
+    Print(("/who: %s last seen in %s. This is a snapshot, not continuous tracking."):format(request.name, zone))
+    if window and window:IsShown() and state.expandedResultID then UpdatePages() end
 end
 
 local function RefreshResults()
@@ -1679,6 +1788,7 @@ events:RegisterEvent("LFG_LIST_AVAILABILITY_UPDATE")
 events:RegisterEvent("LFG_LIST_SEARCH_RESULTS_RECEIVED")
 events:RegisterEvent("LFG_LIST_SEARCH_FAILED")
 events:RegisterEvent("LFG_LIST_SEARCH_RESULT_UPDATED")
+events:RegisterEvent("WHO_LIST_UPDATE")
 -- Search is attempted ONLY from the player's Search button click.
 events:RegisterEvent("ADDON_ACTION_BLOCKED")
 events:RegisterEvent("ADDON_ACTION_FORBIDDEN")
@@ -1733,7 +1843,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
     elseif event == "PLAYER_LOGIN" then
         CreateMinimapButton()
         SyncDefaultForParty()
-        Print("v0.6.6 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        Print("v0.6.7 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
@@ -1764,6 +1874,8 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
         FinishSearch(false)
     elseif event == "LFG_LIST_SEARCH_FAILED" then
         FinishSearch(true, arg)
+    elseif event == "WHO_LIST_UPDATE" then
+        MergeWhoLocation()
     elseif event == "LFG_LIST_SEARCH_RESULT_UPDATED" then
         if type(Readable(arg)) == "number" then
             state.rosterClassCache[arg] = nil
