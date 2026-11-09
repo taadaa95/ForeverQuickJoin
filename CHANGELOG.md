@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.3 — 2026-11-09
+
+- Added **My Applications**, a third tab for contacted group leaders. Tracks QuickJoin-sent whispers, manual follow-up whispers, matching incoming replies, and unread conversations for the current session only.
+- Added **Replied** status in application history and a compact **Reply** marker beside the existing Whisper button. Groups still show Sent until a matching leader actually replies; missing responses are never classified as rejection.
+- Kept repeat whispers to the same live listing together. New listings with distinguishable creation times start separate applications; confirmed delisting marks old history as ended rather than deleting it.
+- Added colored counts for character friends (F), Battle.net friends (B), and guildmates (G) beneath the group leader, with expanded explanations on hover. Uses actual, readable search-result fields and does not guess hidden names.
+- Added approximate listing age and **NEW** highlights. NEW is based on observed newly available results from completed manual searches within the same category/activity, or very recent listing age; changing filters never issues a search.
+- Added `/qj apps` and `/qj applications`; all conversations remain session-only and replies use Blizzard chat to send.
+- Extended GitHub Actions to syntax-check the Applications module and run regression smoke tests for reply matching, repeat sends, and ambiguous cross-realm identities.
+
 ## 0.7.2 — 2026-11-09
 
 - Restored Blizzard's original 19×19-pixel role icons in the permanent party summary and each Party Role Manager member row.
