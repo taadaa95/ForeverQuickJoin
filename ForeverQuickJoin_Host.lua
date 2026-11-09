@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.7.1 - cleaner listing header and always-on applicant capture.
+-- Forever QuickJoin 0.7.3 - Find/List/Applications navigation and always-on applicant capture.
 -- Whisper history is session-only; no private message contents go to SavedVariables.
 local addonName = ...
 local Host = {}
@@ -16,7 +16,7 @@ local MAX_APPLICANTS, MAX_MESSAGES, ROWS_PER_PAGE = 100, 35, 10
 local DENIAL = "Sorry, we can't take you for this group. Good luck!"
 local applicants, byName, selected = {}, {}, nil
 local inboxPage, missedProtected = 1, 0
-local panel, window, findTab, hostTab, listingButton
+local panel, window, findTab, hostTab, applicationsTab, listingButton
 local listingStatusLabel, statusLabel, inboxLabel, profileLabel, detailLabel, chatLog
 local queueRows, roleButtons = {}, {}
 local replyInput, replyButton, inviteButton, declineButton, dismissButton, whoButton
@@ -430,16 +430,11 @@ end
 function Host.Attach(parent)
     if panel then return end
     window = parent
-    findTab = Button(window,"Find Groups",485,16,140,25,function()
-        panel:Hide()
-        if findTab then findTab:Disable();hostTab:Enable() end
-    end)
-    hostTab = Button(window,"List Group",628,16,132,25,function()
-        if window.QuickJoinHideAdvanced then window.QuickJoinHideAdvanced() end
-        panel:Show()
-        findTab:Enable();hostTab:Disable()
-        UpdateListingUI()
-        Host.Redraw()
+    -- Compact three-tab navigation fits beside the theme selector.
+    findTab = Button(window,"Find Groups",475,16,102,25,function() Host.OpenFind() end)
+    hostTab = Button(window,"List Group",580,16,96,25,function() Host.OpenList() end)
+    applicationsTab = Button(window,"Applications",679,16,119,25,function()
+        Host.OpenApplications()
     end)
     findTab:Disable()
     panel = CreateFrame("Frame","ForeverQuickJoinHostingPanel",window,"BackdropTemplate")
@@ -542,12 +537,18 @@ function Host.Attach(parent)
     UpdateListingUI()
     Host.Redraw()
 end
+function Host.SetApplicationCount(total,unread)
+    if not applicationsTab then return end
+    local count=type(unread)=="number" and unread or 0
+    applicationsTab:SetText(count>0 and ("Apps ("..count..")") or "Applications")
+end
 function Host.OpenList()
     if not window then return end
     window:Show()
     if window.QuickJoinHideAdvanced then window.QuickJoinHideAdvanced() end
+    if ForeverQuickJoinApplications then ForeverQuickJoinApplications.Hide() end
     panel:Show()
-    findTab:Enable();hostTab:Disable()
+    findTab:Enable();hostTab:Disable();applicationsTab:Enable()
     UpdateListingUI()
     Host.Redraw()
 end
@@ -555,7 +556,16 @@ function Host.OpenFind()
     if not window then return end
     window:Show()
     panel:Hide()
-    findTab:Disable();hostTab:Enable()
+    if ForeverQuickJoinApplications then ForeverQuickJoinApplications.Hide() end
+    findTab:Disable();hostTab:Enable();applicationsTab:Enable()
+end
+function Host.OpenApplications()
+    if not window then return end
+    window:Show()
+    if window.QuickJoinHideAdvanced then window.QuickJoinHideAdvanced() end
+    panel:Hide()
+    if ForeverQuickJoinApplications then ForeverQuickJoinApplications.Open() end
+    findTab:Enable();hostTab:Enable();applicationsTab:Disable()
 end
 local watcher=CreateFrame("Frame")
 for _,event in ipairs({"CHAT_MSG_WHISPER","CHAT_MSG_WHISPER_INFORM","WHO_LIST_UPDATE",
