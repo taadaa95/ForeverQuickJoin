@@ -1,0 +1,8 @@
+# Generated archives, tests and local editor files
+*.zip
+*.log
+*.bak
+*.swp
+.DS_Store
+.vscode/
+.idea/
