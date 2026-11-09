@@ -1,25 +1,29 @@
--- Forever QuickJoin 0.6.8 -- session-only party role confirmation and overrides.
+-- Forever QuickJoin 0.6.9 -- enlarged party status and simplified role confirmation.
 -- This does not change Blizzard's protected group roles or inspect talents/specs.
 local Party = {}
 ForeverQuickJoinParty = Party
 
-local ROLE_ORDER = {"TANK", "HEALER", "DAMAGER", "UNKNOWN"}
+local ROLE_ORDER = {"TANK", "HEALER", "DAMAGER"}
 local ROLE_NAME = {TANK="Tank", HEALER="Healer", DAMAGER="DPS", UNKNOWN="Unknown"}
 local ROLE_ICON = {
     TANK="|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp:14:14:0:-1:64:64:0:19:22:41|t",
     HEALER="|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp:14:14:0:-1:64:64:20:39:1:20|t",
     DAMAGER="|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp:14:14:0:-1:64:64:20:39:22:41|t",
-    UNKNOWN="?",
+    UNKNOWN="",
+}
+local ROLE_ICON_LARGE = {
+    TANK="|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp:25:25:0:-1:64:64:0:19:22:41|t",
+    HEALER="|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp:25:25:0:-1:64:64:20:39:1:20|t",
+    DAMAGER="|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp:25:25:0:-1:64:64:20:39:22:41|t",
 }
 -- Original WoW classes with more than one traditional group role.
 -- Forever customizations cannot reliably be inferred from class or spec;
 -- overrides remain available for EVERY class.
 local NEEDS_DPS_CONFIRMATION = {PRIEST=true, SHAMAN=true, DRUID=true, PALADIN=true, WARRIOR=true}
 local overrides = {} -- per-session only; never saved to SavedVariables
-local summary, summaryTitle, summaryCounts, reviewButton, manager, managerStatus
+local summary, summaryTitle, summaryCounts, summaryNotice, reviewButton, manager, managerStatus
 local memberRows, managerPage, pageLabel, prevButton, nextButton = {}, 1
 local currentMembers, previousWasGroup = {}, false
-local allowNextUnconfirmedWhisper = false
 local attachedWindow
 local PAGE_SIZE = 7
 
@@ -131,7 +135,6 @@ local function Snapshot(prune)
         if previousWasGroup and not grouped then
             -- Rejoining later is a new group session, even for the same player.
             overrides={}
-            allowNextUnconfirmedWhisper=false
             members,grouped=Scan()
         elseif grouped then
             local present={}
@@ -170,11 +173,6 @@ function Party.NeedsReview()
     local total=Safe(GetNumGroupMembers)
     if type(total)=="number" then count=count+math.max(0,math.floor(total)-#members) end
     return count
-end
-function Party.ConsumeSendAnyway()
-    local allow=allowNextUnconfirmedWhisper
-    allowNextUnconfirmedWhisper=false
-    return allow
 end
 local function Label(parent,text,x,y,w,h,font)
     local label=parent:CreateFontString(nil,"OVERLAY",font or "GameFontHighlightSmall")
@@ -216,8 +214,14 @@ local function RefreshView()
         else
             summaryTitle:SetText("Solo — role: "..(ROLE_NAME[members[1].role] or "Unknown"))
         end
-        summaryCounts:SetText(ROLE_ICON.TANK..count.TANK.."  "..ROLE_ICON.HEALER..count.HEALER.."  "..ROLE_ICON.DAMAGER..count.DAMAGER .. (count.UNKNOWN>0 and "  ?"..count.UNKNOWN or ""))
-        reviewButton:SetText(review>0 and "Correct?" or "Change")
+        summaryCounts:SetText(ROLE_ICON_LARGE.TANK.." "..count.TANK.."    "
+            ..ROLE_ICON_LARGE.HEALER.." "..count.HEALER.."    "
+            ..ROLE_ICON_LARGE.DAMAGER.." "..count.DAMAGER
+            ..(count.UNKNOWN>0 and ("   Unassigned: "..count.UNKNOWN) or ""))
+        summaryNotice:SetText(review>0 and (review.." role"..(review==1 and "" or "s").." need review")
+            or (grouped and "Roles confirmed" or "Current character"))
+        summaryNotice:SetTextColor(review>0 and 1 or .65, review>0 and .77 or .85, review>0 and .35 or .7)
+        reviewButton:SetText(review>0 and "Review / Fix Roles" or "Change Roles")
     end
     if not manager or not manager:IsShown() then return end
     local pages=math.max(1,math.ceil(#members/PAGE_SIZE))
@@ -234,13 +238,29 @@ local function RefreshView()
         if not m then row:Hide() else
             row:Show()
             row.title:SetText((m.isSelf and "You: " or "")..m.name.."  •  Lv"..m.level.." "..m.className)
+            if m.role=="TANK" then
+                row.roleIcon:SetTexCoord(0,19/64,22/64,41/64)
+                row.roleIcon:Show()
+            elseif m.role=="HEALER" then
+                row.roleIcon:SetTexCoord(20/64,39/64,1/64,20/64)
+                row.roleIcon:Show()
+            elseif m.role=="DAMAGER" then
+                row.roleIcon:SetTexCoord(20/64,39/64,22/64,41/64)
+                row.roleIcon:Show()
+            else
+                -- Unassigned roles require selection; do not show an incorrect icon.
+                row.roleIcon:Hide()
+            end
             local hint= m.reason and (m.reason.."  |  ") or ""
             row.info:SetText(hint.."WoW: "..(ROLE_NAME[m.assigned] or "Unknown").."  |  "..m.source)
             row.info:SetTextColor(m.review and 1 or .7,m.review and .75 or .88,m.review and .35 or .76)
-            for role,button in pairs(row.roleButtons) do
+            for _,role in ipairs(ROLE_ORDER) do
                 local selected=m.role==role
-                button:SetText((selected and "[" or "")..(ROLE_NAME[role] or "?")..(selected and "]" or ""))
+                row.roleButtons[role]:SetText((selected and "[" or "")..ROLE_NAME[role]
+                    ..(selected and "]" or ""))
             end
+            -- Auto is an action, not a selectable role. Never turn it into '?'.
+            row.roleButtons.AUTO:SetText("Auto")
         end
     end
 end
@@ -251,20 +271,21 @@ end
 local function Override(member,role)
     if not member then return end
     overrides[member.key]={role=NormalRole(role),assignedAtConfirmation=member.assigned}
-    allowNextUnconfirmedWhisper=false
     NotifyChanged()
 end
 local function ConfirmAll()
     local members=Snapshot(false)
     for _,m in ipairs(members) do
-        overrides[m.key]={role=m.role,assignedAtConfirmation=m.assigned}
+        -- An unassigned/unknown role cannot be confirmed as a valid party role.
+        -- Ask the user to choose Tank, Healer or DPS first.
+        if m.role~="UNKNOWN" then
+            overrides[m.key]={role=m.role,assignedAtConfirmation=m.assigned}
+        end
     end
-    allowNextUnconfirmedWhisper=false
     NotifyChanged()
 end
 local function ResetAll()
     overrides={}
-    allowNextUnconfirmedWhisper=false
     NotifyChanged()
 end
 function Party.Open()
@@ -281,17 +302,18 @@ end
 function Party.Attach(window)
     if summary then return end
     attachedWindow=window
-    -- The hosting tab overlays most of the Find Groups surface, so keep the
-    -- compact status in the top title strip above BOTH tabs.
+    -- A full-width status area replaces the two removed filter rows. Keep it
+    -- above the hosting panel so the party composition is visible on BOTH tabs.
     summary=CreateFrame("Frame",nil,window,"BackdropTemplate")
-    summary:SetPoint("TOPLEFT",window,"TOPLEFT",225,-7)
-    summary:SetSize(253,40)
+    summary:SetPoint("TOPLEFT",window,"TOPLEFT",25,-117)
+    summary:SetSize(789,76)
     summary:SetFrameLevel(window:GetFrameLevel()+30)
     summary:SetBackdrop({bgFile="Interface\\Buttons\\WHITE8X8",edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",edgeSize=10,insets={left=1,right=1,top=1,bottom=1}})
     summary:SetBackdropColor(.07,.09,.12,1)
-    summaryTitle=Label(summary,"Party detected",6,3,177,18,"GameFontNormalSmall")
-    summaryCounts=Label(summary,"",6,21,179,17,"GameFontHighlightSmall")
-    reviewButton=Button(summary,"Change",183,7,66,24,Party.Open)
+    summaryTitle=Label(summary,"Party detected",15,8,340,25,"GameFontNormalLarge")
+    summaryNotice=Label(summary,"",354,11,230,21,"GameFontNormalSmall")
+    summaryCounts=Label(summary,"",15,39,584,32,"GameFontNormalLarge")
+    reviewButton=Button(summary,"Change Roles",614,22,158,35,Party.Open)
 
     manager=CreateFrame("Frame","ForeverQuickJoinRoleManager",window,"BackdropTemplate")
     manager:SetPoint("TOPLEFT",window,"TOPLEFT",33,-68)
@@ -311,15 +333,20 @@ function Party.Attach(window)
         row:SetSize(731,60)
         row:SetBackdrop({bgFile="Interface\\Buttons\\WHITE8X8"})
         row:SetBackdropColor(.085,.105,.14,1)
-        row.title=Label(row,"",10,5,315,25,"GameFontNormal")
-        row.info=Label(row,"",10,30,340,23,"GameFontHighlightSmall")
+        row.roleIcon=row:CreateTexture(nil,"ARTWORK")
+        row.roleIcon:SetSize(34,34)
+        row.roleIcon:SetPoint("TOPLEFT",row,"TOPLEFT",12,-12)
+        row.roleIcon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
+        row.roleIcon:Hide()
+        row.title=Label(row,"",57,5,333,25,"GameFontNormal")
+        row.info=Label(row,"",57,30,333,23,"GameFontHighlightSmall")
         row.roleButtons={}
         for j,role in ipairs(ROLE_ORDER) do
-            row.roleButtons[role]=Button(row,ROLE_NAME[role],351+(j-1)*79,15,75,26,function()
+            row.roleButtons[role]=Button(row,ROLE_NAME[role],395+(j-1)*96,15,88,29,function()
                 Override(row.member,role)
             end)
         end
-        row.roleButtons.AUTO=Button(row,"Auto",669,15,54,26,function()
+        row.roleButtons.AUTO=Button(row,"Auto",682,15,44,29,function()
             if row.member then overrides[row.member.key]=nil; NotifyChanged() end
         end)
         row:Hide()
@@ -328,16 +355,9 @@ function Party.Attach(window)
     prevButton=Button(manager,"<",23,574,48,25,function() managerPage=managerPage-1;RefreshView() end)
     pageLabel=Label(manager,"Page 1 / 1",81,580,125,20)
     nextButton=Button(manager,">",213,574,48,25,function() managerPage=managerPage+1;RefreshView() end)
-    Button(manager,"Confirm shown roles",272,571,159,30,ConfirmAll)
-    Button(manager,"Reset to WoW",441,571,134,30,ResetAll)
-    Button(manager,"Send anyway once",584,571,157,30,function()
-        allowNextUnconfirmedWhisper=true
-        manager:Hide()
-        if attachedWindow and attachedWindow.QuickJoinStatus then
-            attachedWindow.QuickJoinStatus("Unconfirmed roles permitted for the next Whisper click only.")
-        end
-    end)
-    Label(manager,"Use a role button to confirm/correct that member. [Role] = current selection; Auto clears an override.",22,613,726,21,"GameFontHighlightSmall")
+    Button(manager,"Confirm detected roles",286,571,200,30,ConfirmAll)
+    Button(manager,"Reset to WoW",507,571,140,30,ResetAll)
+    Label(manager,"Pick Tank, Healer or DPS for each uncertain member. Auto clears an override; unknown roles must be assigned.",22,613,726,21,"GameFontHighlightSmall")
     manager:Hide()
     RefreshView()
 end
