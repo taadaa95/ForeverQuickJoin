@@ -1,61 +1,61 @@
-# Forever QuickJoin v0.6.0
+# Forever QuickJoin v0.6.1
 
-A World of Warcraft **Forever** 1.60.1 (Interface `16001`) addon for finding groups, listing your own group, and managing recruitment whispers in a role-sorted inbox.
+A World of Warcraft **Forever** (1.60.1, Interface `16001`) addon for finding groups, managing listings using Blizzard’s secure listing tab, and handling incoming recruitment whispers in a dedicated role-sorted inbox.
 
 ## Installation
 
-Extract the install ZIP into `_forever_/Interface/AddOns/` so the folder contains both `ForeverQuickJoin.lua` and `ForeverQuickJoin_Host.lua` alongside `ForeverQuickJoin.toc`. Replace the previous version and `/reload` or restart.
+1. Remove the previous `ForeverQuickJoin` folder.
+2. Extract the ZIP so the path is `_forever_/Interface/AddOns/ForeverQuickJoin/ForeverQuickJoin.toc`.
+3. Restart WoW, or type `/reload` after updating the addon.
+4. Open with `/qj` or the minimap button. `/qj list` opens the hosting screen directly; `/qj find` opens group search.
 
-Open using **`/qj`** or the minimap icon. **`/qj list`** opens the hosting view directly, and **`/qj find`** opens Find Groups.
+## Find Groups
 
-## Find Groups (retained)
+Unchanged from v0.5.2: select a category/activity and click **Search**, sort by group size, filter by estimated role vacancies or groups already containing a tank/healer, inspect current group roles, and send customizable one-click whispers. `/qj reset` restores the original solo/group-aware template.
 
-Choose a category and activity, click **Search**, sort by member count, filter by group composition/estimated role vacancies, view the Blizzard role icons, and use **Whisper to Join**. Search is only initiated by a physical click.
+**Preview:** the word `Preview:` now uses the normal UI text color; only the resolved whisper text uses the player's configured Blizzard `WHISPER` chat color.
 
-The solo default message is exactly:
+## List Group / Applicant Inbox
 
-`Level {level} {class} {role} LFG {activity}, Current location: {location}, inv please!`
+1. Switch to **List Group** from the tabs at the top of `/qj`.
+2. Click **Open Blizzard Listing**. This opens Blizzard's native Listing tab, where you create, edit or remove your listing. Blizzard performs the restricted action; QuickJoin does not call `C_LFGList.CreateListing()`, `UpdateListing()`, or `RemoveListing()`.
+3. Return to QuickJoin via `/qj` or the minimap button. Incoming whispers are captured even while the QuickJoin window is hidden.
+4. Incoming player whispers automatically enter the in-session inbox (even while the QuickJoin window is closed), unless **Capture incoming whispers** is unchecked.
+5. Applicants are sorted into **Tank**, **Healer**, **DPS**, and **Unknown** groups, with Blizzard role icons and class icons when the class is known. Newest messages appear first within each group. Unread counts and role totals are visible.
+6. Click an applicant to see **only that player's conversation** and available class/level/role/location details. The role buttons let you manually correct the role assignment.
+7. Use **Reply** to respond, **Invite** to send a party invitation, **Decline + Remove** to send the standard decline whisper and remove the applicant, or **Dismiss** to remove a conversation without messaging.
+8. **Lookup /who** pre-fills the `/who` query for the selected player in chat. Press **Enter** yourself to run it. When the game returns Who data, QuickJoin updates the applicant's class, level and zone where available.
 
-Use **Reload Whisper Template** or `/qj reset` to restore the solo/party-aware default. Custom templates remain persistent per character. The **Preview:** label is now the normal UI text color; only the resulting message uses Blizzard's whisper color.
+### What the addon can actually know
 
-## List Group and Applicant Inbox (new)
+- **Class:** From `GetPlayerInfoByGUID()` when a character GUID and record are available. Shows a question-mark icon otherwise.
+- **Level:** From the same GUID lookup (when provided by the Forever client), or a returned `/who` result.
+- **Role:** Generic whispers do **not** contain a role field. QuickJoin conservatively parses self-reported phrases like `Tank LFG` / `Healer here` / `DPS LFG`; a message asking for a tank is **not** classified as a tank applicant. Unknown/ambiguous roles stay in **Unknown** until set manually.
+- **Location:** Not available directly from a whisper. A player-initiated `/who` can provide their current zone, if the client/server returns it. Location is not tracked automatically.
+- **Spec:** Not exposed by general whisper events. QuickJoin displays **unknown** instead of guessing.
 
-1. Open the **List Group** tab, choose category and activity, and click **List Group**. To change an existing listing, use **Update Listing**; **Delist** removes it. These are native Blizzard Group Finder operations, initiated directly by each button.
-2. Incoming whispers are collected in a **session-only queue**, even when the QuickJoin window is closed. Toggle **Capture incoming whispers** to pause. The inbox includes all regular whispers while enabled, not exclusively LFG applicants.
-3. Applicants are sorted in **Tank**, **Healer**, **DPS**, then **Unknown** order. Each row displays Blizzard's role icon, the class icon when known, and an unread count. Click a row to see **only that character's messages** in the conversation panel.
-4. The detail panel shows name, class, level, inferred/assigned role, known location, and a spec availability notice. Click a role button to override an incorrect inference.
-5. **Reply** sends your own custom whisper. **Invite** requests a party invite. **Decline + Remove** submits the standard rejection whisper (`Sorry, we can't take you for this group. Good luck!`) and clears that applicant. **Dismiss** clears one applicant without messaging.
-6. **Lookup /who** fills in the chat command for that person. Press **Enter** yourself. On a successful Who result, QuickJoin can update class, level and zone information.
+### Important restrictions and privacy
 
-### Player information: accuracy and restrictions
+- Creating, updating, and removing your listing happens **in Blizzard’s own Listing tab**, not in QuickJoin. This is a deliberate compatibility workaround for the protected-action error reported in v0.6.0; there is no automatic background listing and no attempt to bypass WoW restrictions.
+- `/who` is also restricted. **Lookup /who only prepares text**: it never sends a Who request itself. It is possible for the client not to produce a usable Who response.
+- The inbox stores up to **100 applicants**, each with their most recent **35 messages**, in **session memory only**. Whisper contents are **not** written to SavedVariables and disappear on logout/reload.
+- The inbox captures ordinary incoming whispers from any sender while capture is enabled, not just formal Group Finder applicants. Formal native Group Finder applications are **not yet imported** into this whisper inbox.
+- While WoW marks sender names or message contents as *secret*, the addon cannot reliably group those messages into per-player conversations. Such messages remain visible in normal WoW chat; QuickJoin does not try to circumvent the restriction.
+- **Invite** means an invitation was attempted; the game may require additional confirmation. The applicant stays queued until they join or are dismissed.
+- **Decline + Remove** sends: `Sorry, we can't take you for this group. Good luck!` It removes the applicant after the client accepts the send attempt; actual delivery is not guaranteed.
+- Chat messages are limited to 255 bytes. QuickJoin refuses oversized messages and messages during reported chat lockdown.
 
-- **Class and level:** Usually available from `GetPlayerInfoByGUID()` when WoW provides the sender's GUID and player record; a `/who` result may supply missing class/level.
-- **Role:** Generic whispers contain no verified role field. Only clear self-reports such as `Tank LFG`, `Healer here`, and `DPS LFG` are auto-classified. Ambiguous or unrelated messages stay **Unknown**. Correct a role manually using the role buttons.
-- **Zone:** A whisper does not contain the sender's current location. The player must submit `/who` manually; a successful query can supply zone information.
-- **Spec:** Not available through generic whisper events; QuickJoin shows **unknown**, not a fabricated specialization.
-- **Protected/secret messages:** During restricted client states, WoW can prevent addon code from reading or grouping a whisper sender and message. These whispers continue to appear in normal chat and cannot be forced into the inbox.
+## Controls
 
-### Privacy and capacity
+- `/qj` — toggle QuickJoin
+- `/qj find` — Find Groups tab
+- `/qj list` — List Group / applicant inbox tab
+- `/qj reset` — restore the current solo/party default whisper template
+- `/qj activities` — request group activity metadata
+- `/qj all` — toggle showing activities outside your suggested level range
+- `/qj retry` — re-enable a search button that WoW blocked
+- `/qj status` — show diagnostic state
 
-Applicant conversations live only in **session memory** (up to **100 applicants**, last **35 messages** per applicant). Whisper histories are **not saved** to the disk, and disappear on `/reload` or logout. Capture is enabled by default, but can be disabled per character.
+## Validation
 
-### Protected actions
-
-The listing/update/delist actions require a permitted click and may still be blocked by the Forever client. The addon does not try to bypass this restriction. The **Lookup /who** control only **prepares text**; it does not run automated WHO requests. Invitations can require additional Blizzard confirmation. A chat send attempt is not a guarantee of delivery. Whispers exceeding **255 bytes** or attempted during client chat lockdown are refused.
-
-Formal Group Finder application records are not yet included in the whisper inbox; this version routes actual chat whispers.
-
-## Commands
-
-- `/qj`: open/close
-- `/qj list`: List Group / inbox
-- `/qj find`: Find Groups
-- `/qj reset`: restore default message
-- `/qj activities`: refresh available activity metadata
-- `/qj all`: include off-level activities
-- `/qj retry`: re-enable a blocked Search button
-- `/qj status`: diagnostics
-
-## Verification
-
-Lua syntax and mocked-client regression tests passed for the previous finder, whisper rendering, listing creation/update, applicant classification and role grouping, thread isolation, Who lookup preparation, invites, and declines. **The new UI has not been tested in the actual game client.**
+The Lua sources were checked and simulated client regression tests were run for the existing Find Groups features and the native listing handoff, incoming-whisper routing, role sorting, character details, `/who` preparation, Invites, and Declines. **Testing in the actual Forever client remains necessary.**
