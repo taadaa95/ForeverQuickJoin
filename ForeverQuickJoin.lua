@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.5.2 -- whisper-colored preview, cleaner Search-only controls.
+-- Forever QuickJoin 0.6.0 -- host inbox, listing tools, and whisper-colored message only.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
@@ -25,7 +25,7 @@ local COOLDOWN = 3
 local db, window, categoryDropdown, activityDropdown, searchButton
 local sortDropdown, locationLabel, minimapButton, clearFilterButton, templateResetButton
 local filterButtons = {}
-local statusLabel, pageLabel, messageBox, previewLabel, prevButton, nextButton
+local statusLabel, pageLabel, messageBox, previewLabel, previewTitleLabel, prevButton, nextButton
 local rows = {}
 local state = {
     categoryID = nil,
@@ -255,7 +255,7 @@ local function UpdatePreview()
         end
         previewLabel:SetTextColor(r, g, b)
         -- Never truncate: the {location} value is often near the end.
-        previewLabel:SetText("Preview: " .. BuildMessage(nil))
+        previewLabel:SetText(BuildMessage(nil))
     end
     if locationLabel then
         local partySize = GroupSize()
@@ -983,7 +983,8 @@ local function CreateWindow()
         end
         UpdatePreview()
     end)
-    previewLabel = MakeLabel(window, "", "GameFontHighlightSmall", 26, -655, 785, 55)
+    previewTitleLabel = MakeLabel(window, "Preview:", "GameFontNormalSmall", 26, -655, 70, 24)
+    previewLabel = MakeLabel(window, "", "GameFontHighlightSmall", 98, -655, 702, 55)
     previewLabel:SetJustifyV("TOP")
     locationLabel = MakeLabel(window, "", "GameFontNormalSmall", 26, -717, 785, 20)
     statusLabel = MakeLabel(window, "Waiting for activities...", "GameFontHighlightSmall", 26, -741, 785, 20)
@@ -999,6 +1000,9 @@ local function CreateWindow()
         RefreshCategories()
         RefreshResults()
     end)
+    if ForeverQuickJoinHost and ForeverQuickJoinHost.Attach then
+        ForeverQuickJoinHost.Attach(window)
+    end
     window:Hide()
     UpdatePages()
     return window
@@ -1116,6 +1120,12 @@ SlashCmdList.FOREVERQUICKJOIN = function(msg)
         db.templateIsDefault = true
         SyncDefaultForParty()
         Print("Whisper template reloaded for " .. (GroupSize() > 0 and "your current party." or "solo play."))
+    elseif msg == "list" then
+        if not window then ToggleWindow() elseif not window:IsShown() then window:Show() end
+        if ForeverQuickJoinHost then ForeverQuickJoinHost.OpenList() end
+    elseif msg == "find" then
+        if not window then ToggleWindow() elseif not window:IsShown() then window:Show() end
+        if ForeverQuickJoinHost then ForeverQuickJoinHost.OpenFind() end
     elseif msg == "refresh" or msg == "sync" then
         RefreshResults()
         Print("Re-read the Group Finder's cached listings (no network search).")
@@ -1140,7 +1150,7 @@ SlashCmdList.FOREVERQUICKJOIN = function(msg)
     elseif msg == "" then
         ToggleWindow()
     else
-        Print("Commands: /qj, /qj refresh, /qj activities, /qj all, /qj retry, /qj status, /qj reset (reload whisper).")
+        Print("Commands: /qj, /qj list, /qj find, /qj activities, /qj all, /qj retry, /qj status, /qj reset.")
     end
 end
 
@@ -1188,7 +1198,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
     elseif event == "PLAYER_LOGIN" then
         CreateMinimapButton()
         SyncDefaultForParty()
-        Print("v0.5.2 loaded. /qj or the minimap button opens QuickJoin.")
+        Print("v0.6.0 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""

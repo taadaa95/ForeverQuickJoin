@@ -1,8 +1,9 @@
 ## Interface: 16001
 ## Title: Forever QuickJoin
-## Notes: Group Finder with role vacancies, sorting, minimap button, party-aware whispers and live location. /qj
+## Notes: Find and list groups, manage role-sorted whisper applicants, invite and decline. /qj
 ## Category: Group Finder
-## Version: 0.5.2
+## Version: 0.6.0
 ## SavedVariablesPerCharacter: ForeverQuickJoinDB
 
 ForeverQuickJoin.lua
+ForeverQuickJoin_Host.lua
