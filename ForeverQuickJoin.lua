@@ -198,6 +198,110 @@ local function ResultInfo(id)
     return ok and Readable(info) or nil, ok and type(Readable(info))=="table"
 end
 
+-- Listing age and social fields are read-only Group Finder results. Only a
+-- completed *user-initiated* search advances the NEW-listing baseline.
+local function ListingFingerprint(id, info)
+    local base=SentIdentity(id,info)
+    if not base then return nil end
+    local title=Readable(info.name)
+    if type(title)~="string" then title="" end
+    return base.."\030"..title:lower()
+end
+
+local function AgeLabel(age)
+    age=Readable(age)
+    if type(age)~="number" or age<0 or age>2592000 then return nil end
+    age=math.floor(age)
+    if age<60 then return age.."s" end
+    if age<3600 then return math.floor(age/60).."m" end
+    if age<86400 then return math.floor(age/3600).."h" end
+    return math.floor(age/86400).."d"
+end
+
+local function RelatedCounts(info)
+    if type(info)~="table" then return nil end
+    local character=Readable(info.numCharFriends)
+    local battle=Readable(info.numBNetFriends)
+    local guild=Readable(info.numGuildMates)
+    local function Number(value)
+        return type(value)=="number" and value>=0 and math.floor(value) or 0
+    end
+    character,battle,guild=Number(character),Number(battle),Number(guild)
+    if character+battle+guild==0 then return nil end
+    return {character=character,battle=battle,guild=guild}
+end
+
+local function RelatedLabel(info)
+    local c=RelatedCounts(info)
+    if not c then return "" end
+    local result={}
+    if c.character>0 then result[#result+1]="|cff91c8ffF:"..c.character.."|r" end
+    if c.battle>0 then result[#result+1]="|cff91c8ffB:"..c.battle.."|r" end
+    if c.guild>0 then result[#result+1]="|cffffd76bG:"..c.guild.."|r" end
+    return table.concat(result,"  ")
+end
+
+local function IsNewListing(id,info)
+    local key=ListingFingerprint(id,info)
+    if not key then return false end
+    local expires=state.newListings[key]
+    if type(expires)~="number" or GetTime()>expires then return false end
+    local age=Readable(info.age)
+    if type(age)=="number" and age>300 then return false end
+    return true
+end
+
+local function TrackSearchAppearances(ids)
+    local now=GetTime()
+    local scope=tostring(state.categoryID or 0)..":"..tostring(state.activityID or "all")
+    local previous=state.scopeSearches[scope]
+    local present={}
+    for _,id in ipairs(ids) do
+        if type(Readable(id))=="number" then
+            local info,verified=ResultInfo(id)
+            if verified and Readable(info.isDelisted)~=true then
+                local key=ListingFingerprint(id,info)
+                if key then
+                    present[key]=true
+                    local started=SentStartTime(info)
+                    local prior=state.seenListings[key]
+                    local differentListing=prior and prior.started and started
+                        and math.abs(prior.started-started)>90
+                    local age=Readable(info.age)
+                    -- A very recent listing can be marked NEW on the first
+                    -- search; otherwise only new arrivals within the same
+                    -- previously searched category/activity qualify.
+                    local freshByAge=type(age)=="number" and age>=0 and age<=180
+                    local unseen=(not prior and (previous~=nil or freshByAge))
+                        or differentListing
+                    if unseen then
+                        state.newListings[key]=now+240
+                    end
+                    if not prior then state.seenListingCount=state.seenListingCount+1 end
+                    state.seenListings[key]={started=started,last=now}
+                end
+            end
+        end
+    end
+    state.scopeSearches[scope]=present
+    if state.seenListingCount>1500 then
+        -- Bound memory during long sessions without forgetting active
+        -- listings or any Sent/application history.
+        local removed=0
+        for key,entry in pairs(state.seenListings) do
+            if not present[key] and now-(entry.last or 0)>1800 then
+                state.seenListings[key]=nil
+                state.newListings[key]=nil
+                removed=removed+1
+            end
+        end
+        state.seenListingCount=state.seenListingCount-removed
+    end
+    for key,expiry in pairs(state.newListings) do
+        if now>expiry then state.newListings[key]=nil end
+    end
+end
+
 local function Print(msg)
     if DEFAULT_CHAT_FRAME then
         DEFAULT_CHAT_FRAME:AddMessage(PREFIX .. tostring(msg))
@@ -1204,7 +1308,7 @@ local function MergeWhoLocation()
     if window and window:IsShown() and state.expandedResultID then UpdatePages() end
 end
 
-local function RefreshResults()
+local function RefreshResults(freshSearch)
     if not C_LFGList or not C_LFGList.GetFilteredSearchResults then return end
     local ok, total, ids = pcall(C_LFGList.GetFilteredSearchResults)
     if ok and ids == nil and total == 0 then ids = {} end
@@ -1212,6 +1316,7 @@ local function RefreshResults()
         Status("Couldn't read the search results.")
         return
     end
+    if freshSearch==true then TrackSearchAppearances(ids) end
     state.cachedResults = {}
     state.rosterClassCache = {}
     state.pinnedRealIDs = {}
@@ -1421,7 +1526,7 @@ local function FinishSearch(failed, reason)
         Status(type(reason) == "string" and reason ~= "" and ("Search failed: " .. Truncate(reason, 105))
             or "Search failed. You can retry; previously cached listings remain available.")
     else
-        RefreshResults()
+        RefreshResults(true)
     end
 end
 
