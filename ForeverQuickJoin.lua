@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.6.7 -- opt-in member /who area lookup, no automated searches.
+-- Forever QuickJoin 0.6.8 -- party role manager, status and confirmed role whispers.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
@@ -198,6 +198,9 @@ local function PartyRoster()
             local level = ReadUnitValue(UnitLevel, unit)
             local class = ReadUnitValue(UnitClass, unit)
             local role = ReadUnitValue(UnitGroupRolesAssigned, unit)
+            local resolved = ForeverQuickJoinParty and ForeverQuickJoinParty.RoleFor
+                and ForeverQuickJoinParty.RoleFor(unit) or nil
+            if type(resolved) == "string" then role = resolved end
             table.insert(roster, {
                 name=type(name) == "string" and name ~= "" and name or "Unknown member",
                 level=type(level) == "number" and level > 0 and tostring(level) or "?",
@@ -229,10 +232,18 @@ end
 local function BuildMessage(info)
     local class = Readable(UnitClass("player")) or "player"
     local roster, groupSize = PartyRoster()
+    local playerRole = GetRole()
+    if ForeverQuickJoinParty and ForeverQuickJoinParty.RoleFor then
+        local effective = ForeverQuickJoinParty.RoleFor("player")
+        if effective == "TANK" then playerRole = "Tank"
+        elseif effective == "HEALER" then playerRole = "Healer"
+        elseif effective == "DAMAGER" then playerRole = "DPS"
+        elseif effective == "UNKNOWN" then playerRole = "Unassigned" end
+    end
     local parts = {
         level = tostring(Readable(UnitLevel("player")) or "?"),
         class = class,
-        role = GetRole(),
+        role = playerRole,
         activity = ResultActivityName(info),
         name = Readable(UnitName("player")) or "player",
         location = CurrentLocation(),
@@ -325,6 +336,18 @@ local function SendWhisper(resultID)
     if type(count) ~= "number" or count < 1 then
         Print("This listing is unavailable.")
         return
+    end
+    -- A wrong party role is worse than an extra click. Review uncertain
+    -- assignments before sending group composition to a group leader.
+    local template = CurrentTemplate()
+    if GroupSize() > 0 and (template:find("{party}",1,true) or template:find("{role}",1,true))
+        and ForeverQuickJoinParty and ForeverQuickJoinParty.NeedsReview
+        and ForeverQuickJoinParty.NeedsReview() > 0 then
+        if not ForeverQuickJoinParty.ConsumeSendAnyway() then
+            Status("Please confirm uncertain party roles, or choose Send anyway once.")
+            ForeverQuickJoinParty.Open()
+            return
+        end
     end
     local message = BuildMessage(info)
     if message == "" then
@@ -1622,6 +1645,11 @@ local function CreateWindow()
     if ForeverQuickJoinHost and ForeverQuickJoinHost.Attach then
         ForeverQuickJoinHost.Attach(window)
     end
+    window.QuickJoinUpdatePreview = UpdatePreview
+    window.QuickJoinStatus = Status
+    if ForeverQuickJoinParty and ForeverQuickJoinParty.Attach then
+        ForeverQuickJoinParty.Attach(window)
+    end
     window:Hide()
     UpdatePages()
     return window
@@ -1640,6 +1668,9 @@ SyncDefaultForParty = function()
                 state.settingTemplate = false
             end
         end
+    end
+    if ForeverQuickJoinParty and ForeverQuickJoinParty.Refresh then
+        ForeverQuickJoinParty.Refresh(false)
     end
     if window and window:IsShown() then UpdatePreview() end
 end
@@ -1745,6 +1776,9 @@ SlashCmdList.FOREVERQUICKJOIN = function(msg)
     elseif msg == "find" then
         if not window then ToggleWindow() elseif not window:IsShown() then window:Show() end
         if ForeverQuickJoinHost then ForeverQuickJoinHost.OpenFind() end
+    elseif msg == "roles" or msg == "party" then
+        if not window then ToggleWindow() elseif not window:IsShown() then window:Show() end
+        if ForeverQuickJoinParty then ForeverQuickJoinParty.Open() end
     elseif msg == "refresh" or msg == "sync" then
         RefreshResults()
         Print("Re-read the Group Finder's cached listings (no network search).")
@@ -1768,7 +1802,7 @@ SlashCmdList.FOREVERQUICKJOIN = function(msg)
     elseif msg == "" then
         ToggleWindow()
     else
-        Print("Commands: /qj, /qj list, /qj find, /qj activities, /qj all, /qj retry, /qj status, /qj reset.")
+        Print("Commands: /qj, /qj list, /qj find, /qj roles, /qj activities, /qj all, /qj retry, /qj status, /qj reset.")
     end
 end
 
@@ -1843,7 +1877,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
     elseif event == "PLAYER_LOGIN" then
         CreateMinimapButton()
         SyncDefaultForParty()
-        Print("v0.6.7 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        Print("v0.6.8 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
