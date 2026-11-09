@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.7.3 -- applications, social matches and new-listing discovery.
+-- Forever QuickJoin 0.7.4 -- optional team-composition override for unconventional groups.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
@@ -826,6 +826,9 @@ end
 
 local function PassesRoleFilters(resultID, info)
     if not db then return true end
+    -- Skip only QuickJoin's local tank/healer/DPS composition requirements.
+    -- Other advanced filters and Blizzard's own restrictions stay in force.
+    if db.advanced and db.advanced.ignoreTeamComposition == true then return true end
     local filters = db.filters or {}
     local needAny = filters.needTank or filters.needHealer or filters.needDps
     if not needAny and not filters.hasTank and not filters.hasHealer then
@@ -868,6 +871,15 @@ local function UpdateAdvancedControls()
     end
     for field, button in pairs(advancedCheckButtons) do
         button:SetChecked(advanced[field] == true)
+    end
+    -- Keep saved role filter selections; dim/disable them until opt-out clears.
+    local ignore=advanced.ignoreTeamComposition == true
+    for _,field in ipairs({"needTank","needHealer","needDps","hasTank","hasHealer"}) do
+        local button=filterButtons[field]
+        if button then
+            button:SetEnabled(not ignore)
+            button:SetAlpha(ignore and 0.45 or 1)
+        end
     end
     for playstyle, button in pairs(advancedPlaystyleButtons) do
         button:SetChecked(type(advanced.excludedPlaystyles) == "table"
@@ -1661,7 +1673,7 @@ local function CreateWindow()
     advancedButton:SetText("Advanced Filters >>")
 
     advancedPanel = CreateFrame("Frame", "ForeverQuickJoinAdvancedFilters", window, "BackdropTemplate")
-    advancedPanel:SetSize(365, 633)
+    advancedPanel:SetSize(365, 676)
     advancedPanel:SetFrameStrata("DIALOG")
     advancedPanel:SetFrameLevel(window:GetFrameLevel() + 15)
     advancedPanel:SetClampedToScreen(true)
@@ -1749,8 +1761,16 @@ local function CreateWindow()
     MakeLabel(advancedPanel, "Already has:", "GameFontNormalSmall", 16, -139, 200, 20)
     MakeCheck("hasTank", 15, -161, "Tank", 68)
     MakeCheck("hasHealer", 128, -161, "Healer", 78)
+    local ignoreComposition=CreateFrame("CheckButton", nil, advancedPanel, "UICheckButtonTemplate")
+    ignoreComposition:SetSize(22,22)
+    ignoreComposition:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT", 14, -196)
+    MakeLabel(ignoreComposition, "Ignore team composition", "GameFontHighlightSmall", 26, -2, 310, 22)
+    ignoreComposition:SetScript("OnClick", function(self)
+        SaveAdvanced("ignoreTeamComposition", self:GetChecked())
+    end)
+    advancedCheckButtons.ignoreTeamComposition=ignoreComposition
     MakeLabel(advancedPanel, "Exclude groups containing these classes:",
-        "GameFontNormalSmall", 15, -199, 336, 19)
+        "GameFontNormalSmall", 15, -239, 336, 19)
     local visibleIndex = 0
     for _, option in ipairs(CLASS_OPTIONS) do
         local token, english = option[1], option[2]
@@ -1765,7 +1785,7 @@ local function CreateWindow()
             local button = CreateFrame("CheckButton", nil, advancedPanel, "UICheckButtonTemplate")
             button:SetSize(22, 22)
             button:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT",
-                15 + col * 169, -221 - rowNum * 27)
+                15 + col * 169, -261 - rowNum * 27)
             MakeLabel(button, label, "GameFontHighlightSmall", 24, -2, 138, 21)
             button:SetScript("OnClick", function(self)
                 SaveClassExclusion(token, self:GetChecked())
@@ -1776,9 +1796,9 @@ local function CreateWindow()
     end
     MakeLabel(advancedPanel,
         "Class exclusions require a readable roster; unknown rosters are hidden.",
-        "GameFontHighlightSmall", 16, -354, 339, 34)
+        "GameFontHighlightSmall", 16, -394, 339, 34)
     MakeLabel(advancedPanel, "Exclude these playstyles:",
-        "GameFontNormalSmall", 16, -389, 332, 19)
+        "GameFontNormalSmall", 16, -429, 332, 19)
     for i, option in ipairs(ADVANCED_PLAYSTYLES) do
         local id, label = option[1], option[2]
         local col = (i - 1) % 2
@@ -1786,18 +1806,18 @@ local function CreateWindow()
         local button = CreateFrame("CheckButton", nil, advancedPanel, "UICheckButtonTemplate")
         button:SetSize(22, 22)
         button:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT",
-            15 + col * 169, -415 - rowNum * 29)
+            15 + col * 169, -455 - rowNum * 29)
         MakeLabel(button, label, "GameFontHighlightSmall", 24, -2, 137, 21)
         button:SetScript("OnClick", function(self)
             SavePlaystyleExclusion(id, self:GetChecked())
         end)
         advancedPlaystyleButtons[id] = button
     end
-    MakeLabel(advancedPanel, "Max members:", "GameFontNormalSmall", 16, -486, 108, 21)
+    MakeLabel(advancedPanel, "Max members:", "GameFontNormalSmall", 16, -526, 108, 21)
     advancedMaxMembersDropdown = CreateFrame("DropdownButton", nil,
         advancedPanel, "WowStyle1DropdownTemplate")
     advancedMaxMembersDropdown:SetWidth(215)
-    advancedMaxMembersDropdown:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT", 128, -481)
+    advancedMaxMembersDropdown:SetPoint("TOPLEFT", advancedPanel, "TOPLEFT", 128, -521)
     advancedMaxMembersDropdown:SetupMenu(function(_, root)
         root:SetTag("MENU_FOREVER_QUICKJOIN_ADVANCED_SIZE")
         for _, option in ipairs(ADVANCED_MAX_MEMBERS) do
@@ -1815,11 +1835,11 @@ local function CreateWindow()
         button:SetScript("OnClick", function(self) SaveAdvanced(field, self:GetChecked()) end)
         advancedCheckButtons[field] = button
     end
-    AdvancedCheck("whisperable", "Only groups I can whisper", -525)
-    AdvancedCheck("hasNotes", "Only groups with descriptions", -555)
+    AdvancedCheck("whisperable", "Only groups I can whisper", -565)
+    AdvancedCheck("hasNotes", "Only groups with descriptions", -595)
     local clearAdvanced = CreateFrame("Button", nil, advancedPanel, "UIPanelButtonTemplate")
     clearAdvanced:SetSize(135, 23)
-    clearAdvanced:SetPoint("TOPRIGHT", advancedPanel, "TOPRIGHT", -15, -596)
+    clearAdvanced:SetPoint("TOPRIGHT", advancedPanel, "TOPRIGHT", -15, -636)
     clearAdvanced:SetText("Clear All Filters")
     clearAdvanced:SetScript("OnClick", ResetFilters)
     advancedPanel:Hide()
@@ -2236,6 +2256,9 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
         -- discard that obsolete selection rather than silently excluding it.
         db.advanced.playstyle = nil
         db.advanced.includeUnknown = nil
+        if type(db.advanced.ignoreTeamComposition) ~= "boolean" then
+            db.advanced.ignoreTeamComposition = false
+        end
         if type(db.advanced.maxMembers) ~= "number"
             or db.advanced.maxMembers < 0 or db.advanced.maxMembers > 40 then
             db.advanced.maxMembers = 0
@@ -2247,7 +2270,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
     elseif event == "PLAYER_LOGIN" then
         CreateMinimapButton()
         SyncDefaultForParty()
-        Print("v0.7.0 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        Print("v0.7.4 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
