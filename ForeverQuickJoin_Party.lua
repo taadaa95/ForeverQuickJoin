@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.6.9 -- enlarged party status and simplified role confirmation.
+-- Forever QuickJoin 0.7.1 -- sharp role artwork and streamlined role correction.
 -- This does not change Blizzard's protected group roles or inspect talents/specs.
 local Party = {}
 ForeverQuickJoinParty = Party
@@ -11,10 +11,13 @@ local ROLE_ICON = {
     DAMAGER="|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp:14:14:0:-1:64:64:20:39:22:41|t",
     UNKNOWN="",
 }
+-- The old PORTRAITROLES sheet allocates only ~19px per icon, which blurs
+-- when enlarged. Blizzard's larger 256x64 UI-LFG-ICON-ROLES sheet gives
+-- each role a native 64x64 region, rendered here at 28px.
 local ROLE_ICON_LARGE = {
-    TANK="|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp:25:25:0:-1:64:64:0:19:22:41|t",
-    HEALER="|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp:25:25:0:-1:64:64:20:39:1:20|t",
-    DAMAGER="|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp:25:25:0:-1:64:64:20:39:22:41|t",
+    TANK="|TInterface\\LFGFrame\\UI-LFG-ICON-ROLES:28:28:0:-1:256:64:128:192:0:64|t",
+    HEALER="|TInterface\\LFGFrame\\UI-LFG-ICON-ROLES:28:28:0:-1:256:64:192:256:0:64|t",
+    DAMAGER="|TInterface\\LFGFrame\\UI-LFG-ICON-ROLES:28:28:0:-1:256:64:64:128:0:64|t",
 }
 -- Original WoW classes with more than one traditional group role.
 -- Forever customizations cannot reliably be inferred from class or spec;
@@ -239,13 +242,13 @@ local function RefreshView()
             row:Show()
             row.title:SetText((m.isSelf and "You: " or "")..m.name.."  •  Lv"..m.level.." "..m.className)
             if m.role=="TANK" then
-                row.roleIcon:SetTexCoord(0,19/64,22/64,41/64)
+                row.roleIcon:SetTexCoord(0.5,0.75,0,1)
                 row.roleIcon:Show()
             elseif m.role=="HEALER" then
-                row.roleIcon:SetTexCoord(20/64,39/64,1/64,20/64)
+                row.roleIcon:SetTexCoord(0.75,1,0,1)
                 row.roleIcon:Show()
             elseif m.role=="DAMAGER" then
-                row.roleIcon:SetTexCoord(20/64,39/64,22/64,41/64)
+                row.roleIcon:SetTexCoord(0.25,0.5,0,1)
                 row.roleIcon:Show()
             else
                 -- Unassigned roles require selection; do not show an incorrect icon.
@@ -271,21 +274,6 @@ end
 local function Override(member,role)
     if not member then return end
     overrides[member.key]={role=NormalRole(role),assignedAtConfirmation=member.assigned}
-    NotifyChanged()
-end
-local function ConfirmAll()
-    local members=Snapshot(false)
-    for _,m in ipairs(members) do
-        -- An unassigned/unknown role cannot be confirmed as a valid party role.
-        -- Ask the user to choose Tank, Healer or DPS first.
-        if m.role~="UNKNOWN" then
-            overrides[m.key]={role=m.role,assignedAtConfirmation=m.assigned}
-        end
-    end
-    NotifyChanged()
-end
-local function ResetAll()
-    overrides={}
     NotifyChanged()
 end
 function Party.Open()
@@ -334,9 +322,9 @@ function Party.Attach(window)
         row:SetBackdrop({bgFile="Interface\\Buttons\\WHITE8X8"})
         row:SetBackdropColor(.085,.105,.14,1)
         row.roleIcon=row:CreateTexture(nil,"ARTWORK")
-        row.roleIcon:SetSize(34,34)
+        row.roleIcon:SetSize(33,33)
         row.roleIcon:SetPoint("TOPLEFT",row,"TOPLEFT",12,-12)
-        row.roleIcon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES")
+        row.roleIcon:SetTexture("Interface\\LFGFrame\\UI-LFG-ICON-ROLES")
         row.roleIcon:Hide()
         row.title=Label(row,"",57,5,333,25,"GameFontNormal")
         row.info=Label(row,"",57,30,333,23,"GameFontHighlightSmall")
@@ -355,8 +343,8 @@ function Party.Attach(window)
     prevButton=Button(manager,"<",23,574,48,25,function() managerPage=managerPage-1;RefreshView() end)
     pageLabel=Label(manager,"Page 1 / 1",81,580,125,20)
     nextButton=Button(manager,">",213,574,48,25,function() managerPage=managerPage+1;RefreshView() end)
-    Button(manager,"Confirm detected roles",286,571,200,30,ConfirmAll)
-    Button(manager,"Reset to WoW",507,571,140,30,ResetAll)
+    -- Deliberately no bulk confirmation/reset buttons. Select a role on the
+    -- relevant player row; Auto clears an individual override.
     Label(manager,"Pick Tank, Healer or DPS for each uncertain member. Auto clears an override; unknown roles must be assigned.",22,613,726,21,"GameFontHighlightSmall")
     manager:Hide()
     RefreshView()
