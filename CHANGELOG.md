@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.1 — 2026-11-09
+
+- Removed **Confirm detected roles** and **Reset to WoW** from the Party Role Manager, retaining per-player Tank/Healer/DPS and Auto actions.
+- Replaced enlarged low-resolution role sprites with Blizzard's larger `UI-LFG-ICON-ROLES` atlas in the persistent party panel and per-character manager icons.
+- Moved **Show all level ranges** below the category and activity selectors. Compact Advanced Filters vertically and align the **Exclude groups containing these classes** heading with the other yellow filter headings.
+- Moved the **Sent** status directly between group-role counts and the Whisper button. `Sent*` denotes a cached, temporarily unverifiable listing.
+- Repositioned **Open Blizzard Listing** into the List Group header to leave a clear gap before the party panel.
+- Removed the incoming-whisper capture checkbox; capture is on by default, remains session-only, and stores no whisper history in SavedVariables.
+- Completely reworked Modern into a restrained graphite/blue theme with layered surfaces, crisp borders, hierarchical typography and distinct button states, while preserving the original Forever appearance and instant switching.
+- Added Lua 5.1 syntax checking to the automated GitHub release workflow.
+
 ## 0.7.0 — 2026-11-09
 
 - Added a persistent green **Sent** badge to contacted group listings. Marker identity uses leader, activity, and listing age where available, and follows refreshed search result IDs.
