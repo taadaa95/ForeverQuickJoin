@@ -8,11 +8,19 @@
 
 - Search Blizzard's Group Finder directly by category and activity.
 - See each group's activity, playstyle, size, and Blizzard tank/healer/DPS icons.
+- **NEW listings:** After a completed Search, newly encountered groups are tagged **NEW** when appropriate; their approximate age (seconds/minutes/hours) appears beside the playstyle when the server provides it. Changing filters does not trigger additional searches.
+- **Friends and guildmates:** Listings containing people you know display colored `F:` (character friends), `B:` (Battle.net friends), and `G:` (guildmates) counts beneath the leader's name. Hover over a listing for the full explanations. Counts are shown only when the client provides them; friend categories may overlap.
 - Expand a group to inspect available member names, classes, levels, roles, specializations, and areas. Right-click a named member to prepare a manual `/who` query when their area is unknown.
 - Keep the **large Party detected** panel visible while browsing or hosting, with a one-click **Review / Fix Roles** or **Change Roles** button.
 - Select **Show all level ranges** beneath the category/activity menus when needed. **Advanced Filters** includes sorting, Space for Tank/Healer/DPS, Already has Tank/Healer, class and playstyle exclusions, group size, and whisperability/description restrictions.
 - Click **Whisper to Join** to contact a group leader using your saved message.
-- Contacted listings display a distinct **green Sent** indicator between their group-role counts and the Whisper button. Sent groups remain pinned at the top even after searching other activities or changing filters. If the client stops exposing a listing, QuickJoin keeps a **Sent*** marker on a cached row, with the Whisper button disabled until it verifies that the listing is still available. A confirmed delisting or a new listing with a different creation time clears the marker. **Sent means the whisper was submitted from QuickJoin, not that the recipient received or read it.**
+- Contacted listings display a distinct **green Sent** indicator between their group-role counts and the Whisper button. When the contacted leader replies, it becomes **Reply** and the Applications tab shows the unread conversation. Sent groups remain pinned at the top even after searching other activities or changing filters. If the client stops exposing a listing, QuickJoin keeps a **Sent*** marker on a cached row, with the Whisper button disabled until it verifies that the listing is still available. A confirmed delisting or a new listing with a different creation time clears the marker. **Sent means the whisper was submitted from QuickJoin, not that the recipient received or read it.**
+
+### My Applications & reply tracking
+
+The **Applications** tab (or `/qj apps`) shows the groups you've contacted through QuickJoin and your outgoing messages. Replies from a matching leader are attached to that conversation, and an unread counter appears on the Applications tab. Open a conversation to mark its replies read, or click **Reply to leader** to prepare a whisper in Blizzard chat (press Enter yourself to send). Follow-up whispers to the same active listing stay in the same thread.
+
+The addon never assumes that silence means a rejection, or that a Sent message was delivered. A disappeared listing is not automatically considered disbanded; if Forever explicitly confirms delisting, the history is marked **Listing ended**. Conversations remain only in memory for the current session, with bounded history and no chat text stored in SavedVariables. Reply matching is deliberately conservative about ambiguous player names and realms.
 
 ### Party Roles
 
@@ -61,6 +69,7 @@ For manual installation, download a release from [GitHub Releases](https://githu
 | `/qj` | Toggle QuickJoin |
 | `/qj find` | Find Groups |
 | `/qj list` | List Group and Applicant Inbox |
+| `/qj apps` or `/qj applications` | My Applications / contacted-group conversations |
 | `/qj roles` or `/qj party` | Open Party Role Manager |
 | `/qj reset` | Restore the solo/party whisper default |
 | `/qj all` | Toggle all activity level ranges |
@@ -73,4 +82,4 @@ For manual installation, download a release from [GitHub Releases](https://githu
 - Blizzard controls search, listing creation, whispers, invites, and who-queries. Protected actions cannot be run automatically in the background; listing creation occurs in Blizzard's own window.
 - Player details may be withheld by the client. Missing specs, roles, or locations are shown as unknown; `/who` requires you to submit the prepared query yourself.
 - Party role confirmations are **not talent/spec detection**. Verify the roles with your party; QuickJoin does not secretly inspect another player's build or alter their assigned group role.
-- The applicant inbox, party role overrides, and **Sent tracking** are session-only. Sent markers survive searches and filter changes, but are cleared on logout/reload. When a group is no longer included in the current server search, its cached Sent row is **not proof it is still available**; the client must explicitly confirm delisting for automatic removal. Your filters, theme, minimap position, and whisper template are saved per character.
+- The applicant inbox, applications/replies, party role overrides, and **Sent tracking** are session-only. Sent markers survive searches and filter changes, but are cleared on logout/reload. When a group is no longer included in the current server search, its cached Sent row is **not proof it is still available**; the client must explicitly confirm delisting for automatic removal. Your filters, theme, minimap position, and whisper template are saved per character.
