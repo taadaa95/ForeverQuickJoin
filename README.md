@@ -9,6 +9,22 @@ A World of Warcraft **Forever** (1.60.1, Interface `16001`) addon for finding gr
 3. Restart WoW, or type `/reload` after updating the addon.
 4. Open with `/qj` or the minimap button. `/qj list` opens the hosting screen directly; `/qj find` opens group search.
 
+## Install and update with WowUp
+
+WowUp can install GitHub-hosted addons when the repository has a packaged GitHub Release.
+In WowUp, select your **WoW Forever** installation, open **Get Addons → Install from URL**, and enter:
+`https://github.com/taadaa95/ForeverQuickJoin`
+
+Do **not** use a one-off ZIP URL for WowUp updates: GitHub repository installs can track later releases; direct ZIP installs cannot. Releases contain a file named `ForeverQuickJoin-vX.Y.Z-forever.zip`, with `ForeverQuickJoin/` at the archive root.
+
+### Publishing a new version
+
+1. Update `## Version:` in `ForeverQuickJoin.toc` to the desired new semantic version, such as `0.6.6`.
+2. Commit the addon changes and version bump to `main`.
+3. GitHub Actions (`.github/workflows/release.yml`) packages the addon and creates a versioned GitHub Release automatically if one doesn't already exist.
+
+You can also publish a matching `vX.Y.Z` tag or manually run the workflow under **Actions → Publish WoW Forever Release → Run workflow**. Tags must match the TOC version. Existing releases are not silently overwritten. Check the **Actions** tab and the [Releases page](https://github.com/taadaa95/ForeverQuickJoin/releases) to verify a successful publication.
+
 ## New in v0.6.5 — Roster fixes and Advanced Filters
 
 - **Member class formatting:** The member panel shows the class once. When Forever's `specName` is just a repetition of `className`, QuickJoin suppresses it; real specializations remain visible.
