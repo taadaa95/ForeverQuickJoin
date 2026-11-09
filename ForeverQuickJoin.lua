@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.6.2 -- finder playstyle labels, hosting inbox, and whispers.
+-- Forever QuickJoin 0.6.3 -- show all level ranges in Find Groups, playstyles and hosting inbox.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
@@ -23,7 +23,7 @@ local PAGE_SIZE = 9
 local COOLDOWN = 3
 
 local db, window, categoryDropdown, activityDropdown, searchButton
-local sortDropdown, locationLabel, minimapButton, clearFilterButton, templateResetButton
+local sortDropdown, locationLabel, minimapButton, clearFilterButton, templateResetButton, allLevelsButton
 local filterButtons = {}
 local statusLabel, pageLabel, messageBox, previewLabel, previewTitleLabel, prevButton, nextButton
 local rows = {}
@@ -496,13 +496,9 @@ local function RebuildVisibleResults(resetPage)
                     if type(Readable(activityID)) == "number" then
                         if state.activityID and activityID == state.activityID then
                             match = true; break
-                        elseif state.categoryID and not state.activityID then
-                            local activity = C_LFGList.GetActivityInfoTable(activityID)
-                            if activity and activity.categoryID == state.categoryID then
-                                match = true; break
-                            elseif state.categoryAllIDs and state.categoryAllIDs[activityID] then
-                                match = true; break
-                            end
+                        elseif state.categoryID and not state.activityID
+                            and state.categoryAllIDs and state.categoryAllIDs[activityID] then
+                            match = true; break
                         end
                     end
                 end
@@ -642,6 +638,19 @@ local function GetActivities(categoryID)
     return arr
 end
 
+-- Readable, level-filtered activities are the single source of truth for
+-- both Search scope and which cached groups the selected category displays.
+local function SetAllowedActivities(activities)
+    state.searchActivityIDs = {}
+    state.categoryAllIDs = {}
+    for _, activity in ipairs(activities or {}) do
+        if type(activity.id) == "number" then
+            table.insert(state.searchActivityIDs, activity.id)
+            state.categoryAllIDs[activity.id] = true
+        end
+    end
+end
+
 local function UpdateSearchButton()
     if not searchButton then return end
     searchButton:SetEnabled(state.categoryID ~= nil
@@ -653,29 +662,11 @@ local function SetCategory(id, name)
     state.categoryID, state.categoryName = id, name
     state.activityID, state.activityName = nil, nil
     state.activities = GetActivities(id)
-    state.searchActivityIDs = {}
+    SetAllowedActivities(state.activities)
     if categoryDropdown then categoryDropdown:OverrideText(name or "All categories") end
     if activityDropdown then
         activityDropdown:OverrideText("All activities")
         activityDropdown:SetEnabled(id ~= nil)
-    end
-    state.categoryAllIDs = nil
-    if id and C_LFGList and C_LFGList.GetAvailableActivities then
-        local ok, fullIDs = pcall(C_LFGList.GetAvailableActivities, id)
-        if ok and type(fullIDs) == "table" then
-            state.categoryAllIDs = {}
-            for _, activityID in ipairs(fullIDs) do state.categoryAllIDs[activityID] = true end
-        end
-    end
-    if id and C_LFGList and C_LFGList.GetAvailableActivities then
-        local ok, available = pcall(C_LFGList.GetAvailableActivities, id)
-        if ok and type(available) == "table" then
-            for _, activityID in ipairs(available) do
-                if type(Readable(activityID)) == "number" then
-                    table.insert(state.searchActivityIDs, activityID)
-                end
-            end
-        end
     end
     UpdateSearchButton()
     if window then RefreshResults() end
@@ -706,15 +697,7 @@ local function RefreshCategories()
             -- Refreshing the current category only changes menu choices.
             state.categoryName = cat.name
             state.activities = cat.id == 0 and {} or GetActivities(cat.id)
-            if cat.id ~= 0 then
-                local ok, raw = pcall(C_LFGList.GetAvailableActivities, cat.id)
-                state.categoryAllIDs = {}
-                if ok and type(raw) == "table" then
-                    for _, activityID in ipairs(raw) do state.categoryAllIDs[activityID] = true end
-                end
-            else
-                state.categoryAllIDs = nil
-            end
+            SetAllowedActivities(state.activities)
             if categoryDropdown then categoryDropdown:OverrideText(cat.name) end
             local chosenID = state.activityID
             state.activityID, state.activityName = nil, nil
@@ -730,22 +713,22 @@ local function RefreshCategories()
                 activityDropdown:OverrideText(state.activityName or "All activities")
                 activityDropdown:SetEnabled(cat.id ~= 0)
             end
-            state.searchActivityIDs = {}
-            if cat.id ~= 0 and C_LFGList and C_LFGList.GetAvailableActivities then
-                local ok, available = pcall(C_LFGList.GetAvailableActivities, cat.id)
-                if ok and type(available) == "table" then
-                    for _, activityID in ipairs(available) do
-                        if type(Readable(activityID)) == "number" then
-                            table.insert(state.searchActivityIDs, activityID)
-                        end
-                    end
-                end
-            end
             UpdateSearchButton()
             return
         end
     end
     SetCategory(categories[1].id, categories[1].name)
+end
+
+-- Only changes local activity and cached-result filtering. An explicit
+-- Search button click is always required for a new server request.
+local function SetAllLevelRanges(enabled)
+    if not db then return end
+    db.allLevels = enabled == true
+    if allLevelsButton then allLevelsButton:SetChecked(db.allLevels) end
+    RefreshCategories()
+    RebuildVisibleResults(true)
+    UpdatePreview()
 end
 
 -- This is invoked by the physical Search button ONLY. A timer or /qj command
@@ -889,8 +872,16 @@ local function CreateWindow()
     searchButton:SetPoint("LEFT", activityDropdown, "RIGHT", 10, 0)
     searchButton:SetText("Search")
     searchButton:SetScript("OnClick", SearchFromClick)
-    MakeLabel(window, "Search queries the server only on click. Filters and sorting work on cached results.",
-        "GameFontHighlightSmall", 25, -98, 780, 19)
+    allLevelsButton = CreateFrame("CheckButton", nil, window, "UICheckButtonTemplate")
+    allLevelsButton:SetSize(22, 22)
+    allLevelsButton:SetPoint("TOPLEFT", window, "TOPLEFT", 24, -91)
+    allLevelsButton:SetChecked(db and db.allLevels == true or false)
+    MakeLabel(allLevelsButton, "Show all level ranges", "GameFontHighlightSmall", 26, -2, 205, 22)
+    allLevelsButton:SetScript("OnClick", function(self)
+        SetAllLevelRanges(self:GetChecked())
+    end)
+    MakeLabel(window, "Search retrieves listings on click. Other filters are local.",
+        "GameFontHighlightSmall", 285, -96, 520, 19)
 
     local function MakeCheck(field, x, y, label, width)
         local button = CreateFrame("CheckButton", nil, window, "UICheckButtonTemplate")
@@ -1162,8 +1153,7 @@ SlashCmdList.FOREVERQUICKJOIN = function(msg)
         Print("Requested a new activity list.")
     elseif msg == "all" then
         if not db then ForeverQuickJoinDB = ForeverQuickJoinDB or {}; db = ForeverQuickJoinDB end
-        db.allLevels = not db.allLevels
-        RefreshCategories()
+        SetAllLevelRanges(not db.allLevels)
         Print(db.allLevels and "Showing activities at all levels." or "Showing suggested-level activities only.")
     elseif msg == "retry" then
         state.searchBlocked = false
@@ -1225,7 +1215,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
     elseif event == "PLAYER_LOGIN" then
         CreateMinimapButton()
         SyncDefaultForParty()
-        Print("v0.6.0 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        Print("v0.6.3 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
