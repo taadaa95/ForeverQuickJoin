@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.6.9 - hosting inbox with space for the party-role status.
+-- Forever QuickJoin 0.7.1 - cleaner listing header and always-on applicant capture.
 -- Whisper history is session-only; no private message contents go to SavedVariables.
 local addonName = ...
 local Host = {}
@@ -20,7 +20,7 @@ local panel, window, findTab, hostTab, listingButton
 local listingStatusLabel, statusLabel, inboxLabel, profileLabel, detailLabel, chatLog
 local queueRows, roleButtons = {}, {}
 local replyInput, replyButton, inviteButton, declineButton, dismissButton, whoButton
-local prevPage, nextPage, pageLabel, captureToggle
+local prevPage, nextPage, pageLabel
 local chatAttempt, chatBlocked = false, false
 local lookingUp = nil
 
@@ -124,8 +124,8 @@ local function Drop(entry)
     if selected == entry then selected = nil end
 end
 local function RecordIncoming(message, name, guid)
-    local db = ForeverQuickJoinDB
-    if not db or db.captureWhispers == false then return end
+    -- Applicant capture is always enabled while QuickJoin is loaded.
+    -- Whisper content remains session-only and is never persisted.
     -- Forever can mark the sender and whisper text as secret during restricted
     -- client states. A secret name cannot be used as a table key or compared.
     name, message = Text(name), Text(message)
@@ -454,27 +454,21 @@ function Host.Attach(parent)
     Label(panel,"LIST GROUP & APPLICANT INBOX",17,10,400,26,"GameFontNormalLarge")
     -- Creation, editing and removal happen in Blizzard's own secure Listing tab.
     -- QuickJoin keeps its full applicant inbox and handles whispers/invites.
-    listingButton=Button(panel,"Open Blizzard Listing",15,43,211,27,OpenNativeListing)
-    listingStatusLabel=Label(panel,"No active listing",235,45,530,26,"GameFontHighlightSmall")
-    statusLabel=Label(panel,"Create, edit or delist in Blizzard; manage whispers and applicants here.",17,145,780,24)
-    captureToggle=CreateFrame("CheckButton",nil,panel,"UICheckButtonTemplate")
-    captureToggle:SetPoint("TOPLEFT",panel,"TOPLEFT",15,-175)
-    captureToggle:SetSize(24,24)
-    captureToggle:SetChecked(not ForeverQuickJoinDB or ForeverQuickJoinDB.captureWhispers~=false)
-    captureToggle:SetScript("OnClick",function(self)
-        if ForeverQuickJoinDB then ForeverQuickJoinDB.captureWhispers=self:GetChecked() end
-        Status(self:GetChecked() and "Capturing incoming whispers (session-only)." or "Whisper capture paused.")
-    end)
-    Label(panel,"Capture incoming whispers while this addon is loaded (session-only; not saved).",43,176,735,24)
-    inboxLabel=Label(panel,"APPLICANTS (0)",17,211,770,24,"GameFontNormal")
+    -- Put the listing handoff in the title row instead of directly above the
+    -- party summary. This gives the summary a visible gap without moving the
+    -- inbox or clipping it on short screens.
+    listingButton=Button(panel,"Open Blizzard Listing",580,10,211,27,OpenNativeListing)
+    listingStatusLabel=Label(panel,"No active listing",371,14,202,24,"GameFontHighlightSmall")
+    statusLabel=Label(panel,"Create, edit or delist in Blizzard; manage whispers and applicants here.",17,155,780,24)
+    inboxLabel=Label(panel,"APPLICANTS (0)",17,201,770,24,"GameFontNormal")
     -- Opaque, visible left queue / right one-applicant conversation.
     local left=CreateFrame("Frame",nil,panel,"BackdropTemplate")
-    left:SetPoint("TOPLEFT",panel,"TOPLEFT",15,-239)
+    left:SetPoint("TOPLEFT",panel,"TOPLEFT",15,-231)
     left:SetSize(306,445)
     left:SetBackdrop({bgFile="Interface\\Buttons\\WHITE8X8"})
     left:SetBackdropColor(.075,.09,.12,1)
     local right=CreateFrame("Frame",nil,panel,"BackdropTemplate")
-    right:SetPoint("TOPLEFT",panel,"TOPLEFT",330,-239)
+    right:SetPoint("TOPLEFT",panel,"TOPLEFT",330,-231)
     right:SetSize(465,445)
     right:SetBackdrop({bgFile="Interface\\Buttons\\WHITE8X8"})
     right:SetBackdropColor(.075,.09,.12,1)
