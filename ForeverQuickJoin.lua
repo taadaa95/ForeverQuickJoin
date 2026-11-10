@@ -1221,11 +1221,26 @@ local function PopulateMemberDetails(row, resultID, info)
     n = math.min(40, math.floor(n))
     local comment = Readable(info and info.comment)
     local showComment = type(comment) == "string" and comment ~= ""
-    local introHeight = showComment and 53 or 34
+    local activityNames=ResultActivityNames(info)
+    local multiple=#activityNames>1
+    local introHeight=(showComment and 53 or 34)+(multiple and 19 or 0)
     local lines = math.ceil(n / 2)
     local height = introHeight + math.max(1, lines) * 45 + 8
     row.detail:SetHeight(height)
     row.detailsTitle:SetText(("GROUP MEMBERS (%d)  ·  Right-click a named player to look up their area (/who)"):format(n))
+    row.detailsActivities:SetShown(multiple)
+    if multiple then
+        row.detailsActivities:SetText("Activities: "..
+            SafeMarkup(Truncate(table.concat(activityNames,", "),112)))
+    else
+        row.detailsActivities:SetText("")
+    end
+    row.detailsComment:ClearAllPoints()
+    row.detailsComment:SetPoint("TOPLEFT",row.detail,"TOPLEFT",8,
+        multiple and -46 or -27)
+    row.detailHint:ClearAllPoints()
+    row.detailHint:SetPoint("TOPLEFT",row.detail,"TOPLEFT",8,
+        multiple and -59 or -40)
     if showComment then
         row.detailsComment:SetText("Notes: " .. SafeMarkup(Truncate(comment, 114)))
         row.detailsComment:Show()
@@ -1355,6 +1370,7 @@ UpdatePages = function()
             if type(info) ~= "table" then
                 row.label:SetText("Expired listing")
                 row.activity:SetText("")
+                row.activityNames={}
                 row.playstyle:SetText("")
                 row.sentBadge:SetText("")
                 row.related:SetText("")
@@ -1366,12 +1382,13 @@ UpdatePages = function()
                 local members = Readable(info.numMembers)
                 local removed = Readable(info.isDelisted)
                 local own = Readable(info.hasSelf)
-                local activity = ResultActivityName(info)
+                local activity = ResultActivityName(info,"row")
+                row.activityNames=ResultActivityNames(info)
                 local displayName = type(name) == "string" and name ~= "" and name or "Leader hidden"
                 row.label:SetText(Truncate(displayName, 21))
                 row.related:SetText(RelatedLabel(info))
                 row.socialCounts=RelatedCounts(info)
-                row.activity:SetText(Truncate(activity, 33))
+                row.activity:SetText(SafeMarkup(Truncate(activity,33)))
                 local rec=(not verified and state.sentVirtualIDs[resultID]) or
                     MatchSent(resultID,info)
                 local replyStatus=rec and ForeverQuickJoinApplications and
@@ -2022,6 +2039,13 @@ local function CreateWindow()
                     if related.battle>0 then GameTooltip:AddLine("Battle.net friends: "..related.battle,.65,.82,1) end
                     if related.guild>0 then GameTooltip:AddLine("Guildmates: "..related.guild,1,.82,.45) end
                 end
+                local activities=row.activityNames
+                if type(activities)=="table" and #activities>0 then
+                    GameTooltip:AddLine(#activities>1 and "Activities:" or "Activity:",1,.82,0)
+                    for _,activityName in ipairs(activities) do
+                        GameTooltip:AddLine("  "..SafeMarkup(activityName),.85,.9,1)
+                    end
+                end
                 local info=ResultInfo(row.resultID)
                 local age=type(info)=="table" and AgeLabel(Readable(info.age))
                 if age then GameTooltip:AddLine("Listing age: approximately "..age,.82,.82,.85) end
@@ -2050,6 +2074,9 @@ local function CreateWindow()
         row.detail:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
         row.detail:SetBackdropColor(0.055, 0.07, 0.10, 1)
         row.detailsTitle = MakeLabel(row.detail, "", "GameFontNormalSmall", 8, -7, 730, 18)
+        row.detailsActivities = MakeLabel(row.detail, "", "GameFontHighlightSmall", 8, -27, 735, 18)
+        row.detailsActivities:SetTextColor(.74,.87,1)
+        row.detailsActivities:Hide()
         row.detailsComment = MakeLabel(row.detail, "", "GameFontHighlightSmall", 8, -27, 735, 19)
         row.detailsComment:SetTextColor(.82, .82, .84)
         row.detailHint = MakeLabel(row.detail, "", "GameFontHighlightSmall", 8, -40, 730, 18)
@@ -2401,7 +2428,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
                 end
             end)
         end
-        Print("v0.7.6 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        Print("v0.7.7 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
