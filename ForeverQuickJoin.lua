@@ -2350,7 +2350,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
                 end
             end)
         end
-        Print("v0.7.5 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        Print("v0.7.6 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
