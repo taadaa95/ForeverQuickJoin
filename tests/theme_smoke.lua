@@ -4,7 +4,10 @@ local function Frame(kind,parent,name)
         backdrop={bgFile="original",edgeFile="originalEdge"},
         bg={.11,.13,.17,1},border={.75,.70,.65,1},width=840,height=785,
         calls={}}
-    if parent then parent.children[#parent.children+1]=f end
+    -- FontStrings/textures are regions, not child frames, in the real WoW UI.
+    if parent and kind~="FontString" and kind~="Texture" then
+        parent.children[#parent.children+1]=f
+    end
     function f:GetObjectType() return self.kind end
     function f:GetParent() return self.parent end
     function f:GetName() return self.name end
@@ -87,7 +90,7 @@ f()
 local theme=assert(ForeverQuickJoinTheme)
 theme.Attach(originalWindow)
 assert(lastDropdown and lastDropdown.width==160,"Single dropdown replaces old buttons")
-assert(#originalWindow.children==4,"Expected: child, button, theme dropdown, not two theme buttons")
+assert(#originalWindow.children==3,"Expected: child, button, theme dropdown, not two theme buttons")
 assert(lastDropdown.text=="Forever","Original theme caption retained")
 assert(originalWindow.bg[4]==1 and child.bg[4]==.9)
 local menu=Menu()
