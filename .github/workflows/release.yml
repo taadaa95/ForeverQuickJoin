@@ -6,6 +6,12 @@ on:
     branches: [main]
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      retry_curseforge:
+        description: "Retry CurseForge upload for current version (use ONLY if that version is absent on CurseForge)"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -74,7 +80,7 @@ jobs:
       # This step activates only after CURSEFORGE_API_TOKEN is added to the
       # repository's Actions secrets. Tokens are never stored in the source.
       - name: Submit newly published release to CurseForge
-        if: steps.github_release.outputs.created == 'true'
+        if: steps.github_release.outputs.created == 'true' || (github.event_name == 'workflow_dispatch' && inputs.retry_curseforge == true)
         env:
           CURSEFORGE_API_TOKEN: ${{ secrets.CURSEFORGE_API_TOKEN }}
           CURSEFORGE_GAME_VERSION_ID: ${{ vars.CURSEFORGE_GAME_VERSION_ID }}
