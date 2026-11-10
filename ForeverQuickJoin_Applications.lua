@@ -1,4 +1,4 @@
--- Forever QuickJoin v0.7.5: preserve application history when a Sent listing expires.
+-- Forever QuickJoin v0.7.7: track every advertised activity in applications.
 -- All queries/searches remain explicitly user initiated. No whispers are saved.
 local Apps = {}
 ForeverQuickJoinApplications = Apps
@@ -154,19 +154,26 @@ function Apps.TrackSent(record,info,message)
     end
     local title=Plain(info.name)
     entry.title=title or entry.title
-    local activityID=Readable(info.activityIDs)
-    if type(activityID)=="table" then activityID=Readable(activityID[1]) end
-    if type(activityID)=="number" then
-        entry.activity="Activity "..activityID
-        if type(C_LFGList)=="table" and type(C_LFGList.GetActivityInfoTable)=="function" then
-            local ok,activity=pcall(C_LFGList.GetActivityInfoTable,activityID)
-            activity=ok and Readable(activity) or nil
-            if type(activity)=="table" then
-                entry.activity=Plain(activity.fullName) or Plain(activity.shortName)
-                    or Plain(activity.name) or entry.activity
+    local ids=Readable(info.activityIDs)
+    if type(ids)~="table" then ids={Readable(info.activityID)} end
+    local names,seen={},{}
+    for i=1,math.min(#ids,20) do
+        local id=Readable(ids[i])
+        if type(id)=="number" and id>0 and not seen[id] then
+            seen[id]=true
+            local name="Activity "..id
+            if type(C_LFGList)=="table" and type(C_LFGList.GetActivityInfoTable)=="function" then
+                local ok,activity=pcall(C_LFGList.GetActivityInfoTable,id)
+                activity=ok and Readable(activity) or nil
+                if type(activity)=="table" then
+                    name=Plain(activity.fullName) or Plain(activity.shortName)
+                        or Plain(activity.name) or name
+                end
             end
+            names[#names+1]=name
         end
     end
+    if #names>0 then entry.activity=table.concat(names," / ") end
     entry.sentCount=entry.sentCount+1
     AddMessage(entry,"out",outgoing)
     PruneOldest()
