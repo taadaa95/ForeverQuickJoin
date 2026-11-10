@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.6 — 2026-11-10
+
+- Replaced the two Forever/Modern header buttons with one compact **Theme** dropdown.
+- Select **Forever** or **Modern** inside the dropdown; the selected theme remains visible on the closed control.
+- Added a **Transparency** checkbox to the same dropdown, which applies to both themes immediately and stays enabled when changing themes.
+- Transparency affects the background backdrops of QuickJoin's windows and panels, not the entire window alpha, preserving readable text, role icons, borders and controls.
+- Saved the selected theme and transparency mode per character. Disabling transparency restores the original Forever backdrop colors and opacity or Modern opaque styling, without /reload.
+- Added Lua 5.1 smoke tests for dropdown selection, saved settings, live switching, backdrop-alpha restoration and non-fading text.
+- Added a CurseForge `.pkgmeta` so tagged source packaging produces only the addon files, excluding development scripts and tests.
+- README intentionally unchanged.
+
 ## 0.7.5 — 2026-11-10
 
 - Fixed contacted groups lingering in Find Groups long after Blizzard stopped listing them. QuickJoin no longer re-pins an old search result ID merely because the client still returns cached details.
