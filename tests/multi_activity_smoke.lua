@@ -125,7 +125,7 @@ assert(message(info):find("Stormwind Stockades / Blackfathom Deeps",1,true),
 assert(not message(nil):find("nil",1,true),"generic preview should use current selection")
 
 -- Full lists should compact only when over WoW's 255 byte limit.
-env.template=string.rep("x",195).." {activity}"
+env.template=string.rep("x",205).." {activity}"
 local short=message(info)
 assert(#short<=255,"compact multi-dungeon whisper should stay under limit")
 assert(short:find("Stormwind Stockades (+2 more)",1,true),
