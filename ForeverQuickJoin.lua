@@ -471,7 +471,9 @@ local function ResultActivityName(info,mode)
         return names[1].." (+"..(#names-1).." more)"
     end
     if mode=="row" and #label>33 and #names>1 then
-        return names[1].." (+"..(#names-1).." more)"
+        local suffix=" (+"..(#names-1)..")"
+        -- Always preserve the +N indicator, even for long dungeon names.
+        return Truncate(names[1],33-#suffix)..suffix
     end
     return label
 end
