@@ -109,8 +109,11 @@ local function Refresh()
     local status=selected.ended and "Listing ended" or
         (selected.unavailable and "No longer verified in Finder" or
         (selected.replies>0 and "Replied" or "Sent (delivery unconfirmed)"))
+    local activityDetail=selected.activity~="" and
+        ("\nActivities: "..Display(selected.activity):sub(1,105)) or ""
     detailsInfo:SetText(Display(selected.leader).." · "..status..
-        " · "..selected.sentCount.." whisper"..(selected.sentCount==1 and "" or "s"))
+        " · "..selected.sentCount.." whisper"..(selected.sentCount==1 and "" or "s")..
+        activityDetail)
     replyButton:Enable()
     conversation:Clear()
     for _,message in ipairs(selected.messages) do
