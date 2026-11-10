@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.7.4 -- optional team-composition override for unconventional groups.
+-- Forever QuickJoin 0.7.5 -- expire stale Sent listings based on fresh search evidence and cache age.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
@@ -23,6 +23,8 @@ local PAGE_SIZE = 9
 local COOLDOWN = 3
 -- /who zones are snapshots. Never display session-cached positions indefinitely.
 local WHO_ZONE_TTL = 300
+-- A cached result ID is never proof that the listing is still available.
+local SENT_UNVERIFIED_TTL = 600 -- 10 minutes since last positive observation
 
 local db, window, categoryDropdown, activityDropdown, searchButton
 local sortDropdown, locationLabel, minimapButton, clearFilterButton, templateResetButton, allLevelsButton
@@ -57,8 +59,11 @@ local state = {
     sentByID = {}, -- session-only attempted whispers by search result id
     sentByListing = {}, -- keep sent markers across refreshed search result IDs
     sentVirtualIDs = {}, -- virtual cached rows for sent groups absent from new search scopes
-    pinnedRealIDs = {}, -- live sent groups bypass local filters and stay visible
+    pinnedRealIDs = {}, -- sent groups found in the most recent result set
+    suppressedIDs = {}, -- prevent old Blizzard result caches resurrecting removed groups
     nextSentVirtualID = -1,
+    pendingSearch = nil, -- explicit player search scope, captured at click time
+    sentExpiryTicker = nil,
     seenListings = {}, -- fingerprints of groups seen in completed manual searches
     scopeSearches = {}, -- previous complete search for the same category/activity
     newListings = {}, -- time-limited NEW highlights
@@ -89,25 +94,68 @@ local function SentStartTime(info)
     end
 end
 
-local function RemoveSent(record)
+local function RemoveSent(record, reason)
     if not record then return end
-    if ForeverQuickJoinApplications and ForeverQuickJoinApplications.ListingEnded then
-        ForeverQuickJoinApplications.ListingEnded(record)
+    -- Missing from a completed search or expired cache is not proof the group
+    -- disbanded. The Applications conversation is retained, but is marked as
+    -- no longer verified rather than falsely saying "Listing ended".
+    if ForeverQuickJoinApplications then
+        if reason=="unavailable" and ForeverQuickJoinApplications.ListingUnavailable then
+            ForeverQuickJoinApplications.ListingUnavailable(record)
+        elseif ForeverQuickJoinApplications.ListingEnded then
+            ForeverQuickJoinApplications.ListingEnded(record)
+        end
     end
     for id,other in pairs(state.sentByID) do
-        if other == record then state.sentByID[id] = nil end
+        if other == record then
+            if reason=="unavailable" or reason=="ended" then state.suppressedIDs[id]=true end
+            state.sentByID[id]=nil
+        end
     end
-    if record.virtualID then state.sentVirtualIDs[record.virtualID] = nil end
+    if (reason=="unavailable" or reason=="ended") and type(record.id)=="number" then
+        state.suppressedIDs[record.id]=true
+    end
+    if record.virtualID then state.sentVirtualIDs[record.virtualID]=nil end
     for id in pairs(state.pinnedRealIDs) do
-        if state.sentByID[id] == nil then state.pinnedRealIDs[id] = nil end
+        if state.sentByID[id]==nil then state.pinnedRealIDs[id]=nil end
     end
-    if record.key and state.sentByListing[record.key] == record then state.sentByListing[record.key] = nil end
+    if record.key and state.sentByListing[record.key]==record then
+        state.sentByListing[record.key]=nil
+    end
+end
+
+local function PruneExpiredSent()
+    if type(GetTime)~="function" then return false end
+    local now=GetTime()
+    local expired={}
+    for _,record in pairs(state.sentByListing) do
+        local last=record.lastConfirmedAt or record.at
+        if type(last)=="number" and now-last>=SENT_UNVERIFIED_TTL then
+            expired[#expired+1]=record
+        end
+    end
+    for _,record in ipairs(expired) do RemoveSent(record,"unavailable") end
+    return #expired>0
+end
+
+local function SearchCoversSent(search,record)
+    if type(search)~="table" or type(search.activityIDs)~="table"
+        or type(record.snapshot)~="table"
+        or type(record.snapshot.activityIDs)~="table" then return false end
+    local searched={}
+    for _,activity in ipairs(search.activityIDs) do
+        if type(activity)=="number" then searched[activity]=true end
+    end
+    for _,activity in ipairs(record.snapshot.activityIDs) do
+        if searched[activity] then return true end
+    end
+    return false
 end
 
 local function MatchSent(id, info)
     if type(info) ~= "table" then return nil end
     if Readable(info.isDelisted) == true and state.sentByID[id] then
-        RemoveSent(state.sentByID[id])
+        RemoveSent(state.sentByID[id],"ended")
         return nil
     end
     local key = SentIdentity(id, info)
@@ -119,11 +167,11 @@ local function MatchSent(id, info)
     -- Its age will reset; do not mark that brand-new listing as contacted.
     local started = SentStartTime(info)
     if record.started and started and math.abs(record.started - started) > 90 then
-        RemoveSent(record)
+        RemoveSent(record,"replaced")
         return nil
     end
     if Readable(info.isDelisted) == true then
-        RemoveSent(record)
+        RemoveSent(record,"ended")
         return nil
     end
     state.sentByID[id] = record
@@ -181,17 +229,19 @@ local function MarkSent(id, info, leader)
             old.started=started or old.started
             old.snapshot=SnapshotSentInfo(info,id)
             old.at=type(GetTime)=="function" and GetTime() or old.at
+            old.lastConfirmedAt=old.at
             state.sentByID[id]=old
             state.pinnedRealIDs[id]=true
             return old
         end
-        RemoveSent(old)
+        RemoveSent(old,"replaced")
     end
     local virtualID=state.nextSentVirtualID
     state.nextSentVirtualID=virtualID-1
     local record = { id = id, key = key, leader = leader, virtualID=virtualID,
         snapshot=SnapshotSentInfo(info,id),
         started = SentStartTime(info), at = type(GetTime) == "function" and GetTime() or 0 }
+    record.lastConfirmedAt=record.at
     state.sentVirtualIDs[virtualID]=record
     state.pinnedRealIDs[id] = true
     state.sentByID[id] = record
@@ -932,7 +982,7 @@ local function RebuildVisibleResults(resetPage)
                     end
                 end
             end
-            if (pinned or match) and removed ~= true
+            if not state.suppressedIDs[id] and (pinned or match) and removed ~= true
                 and (count == nil or (type(count) == "number" and count >= 1))
                 and (pinned or (PassesRoleFilters(id, info)
                     and PassesAdvancedFilters(id, info))) then
