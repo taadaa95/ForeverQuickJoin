@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.7.5 -- expire stale Sent listings based on fresh search evidence and cache age.
+-- Forever QuickJoin 0.7.7 -- multi-activity listing display, search matching and stable tracking.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
@@ -73,18 +73,43 @@ local lastWhisperTarget, lastWhisperTime
 local Readable -- declared early for the sent-listing identity helpers
 local UpdatePages -- shared by message sends and rendered search results
 
--- A listing may receive a different result ID after a new search. The server
--- does not expose a permanent listing GUID on every Forever client, so use the
--- leader + activity + group title, optionally backed by the listing age.
--- Never interpret a filtered-out or missing search result as a disbanded group.
-local function SentIdentity(id, info)
-    if type(info) ~= "table" then return nil end
-    local leader = Readable(info.leaderName)
-    local ids = Readable(info.activityIDs)
-    local activity = type(ids) == "table" and Readable(ids[1]) or Readable(info.activityID)
-    if type(leader) ~= "string" or leader == "" then return nil end
-    if type(activity) ~= "number" then activity = 0 end
-    return leader:lower() .. "\031" .. tostring(activity)
+-- Forever's Group Finder may advertise up to three activities in one
+-- listing. Treat them as a set for identity and as an ordered list for display.
+-- Some older client builds expose only activityID; support that fallback.
+local function ResultActivityIDs(info)
+    local values={}
+    if type(info)~="table" then return values end
+    local ids=Readable(info.activityIDs)
+    local seen={}
+    if type(ids)=="table" then
+        for i=1,math.min(#ids,20) do
+            local id=Readable(ids[i])
+            if type(id)=="number" and id>0 and id==math.floor(id)
+                and not seen[id] then
+                seen[id]=true
+                values[#values+1]=id
+            end
+        end
+    end
+    if #values==0 then
+        local id=Readable(info.activityID)
+        if type(id)=="number" and id>0 and id==math.floor(id) then
+            values[1]=id
+        end
+    end
+    return values
+end
+
+-- Search-result IDs can change between searches, and activity order can
+-- change without the listing changing. Canonicalize the full advertised set.
+-- We do not claim a missing search result means the group disbanded.
+local function SentIdentity(id,info)
+    if type(info)~="table" then return nil end
+    local leader=Readable(info.leaderName)
+    if type(leader)~="string" or leader=="" then return nil end
+    local ids=ResultActivityIDs(info)
+    table.sort(ids)
+    return leader:lower().."\031"..table.concat(ids,",")
 end
 
 local function SentStartTime(info)
@@ -188,17 +213,7 @@ local function SnapshotSentInfo(info, id)
             snapshot[field] = value
         end
     end
-    local activities = Readable(info.activityIDs)
-    snapshot.activityIDs = {}
-    if type(activities)=="table" then
-        for i=1,math.min(#activities,20) do
-            local activity = Readable(activities[i])
-            if type(activity)=="number" then table.insert(snapshot.activityIDs,activity) end
-        end
-    end
-    if #snapshot.activityIDs==0 and type(Readable(info.activityID))=="number" then
-        snapshot.activityIDs[1]=Readable(info.activityID)
-    end
+    snapshot.activityIDs=ResultActivityIDs(info)
     if C_LFGList and type(C_LFGList.GetSearchResultMemberCounts)=="function" then
         local ok,counts=pcall(C_LFGList.GetSearchResultMemberCounts,id)
         counts=ok and Readable(counts) or nil
@@ -408,24 +423,57 @@ local function GetRole()
 end
 
 local function ActivityDisplayName(activityID)
-    if type(activityID) ~= "number" or not C_LFGList or not C_LFGList.GetActivityInfoTable then
-        return nil
+    if type(activityID)~="number" or not C_LFGList
+        or type(C_LFGList.GetActivityInfoTable)~="function" then return nil end
+    local ok,info=pcall(C_LFGList.GetActivityInfoTable,activityID)
+    info=ok and Readable(info) or nil
+    if type(info)~="table" then return nil end
+    -- Blizzard_GroupFinder_VanillaStyle supplies this localized helper.
+    if type(LFGUtil_GetActivityInfoName)=="function" then
+        local good,label=pcall(LFGUtil_GetActivityInfoName,info)
+        label=good and Readable(label) or nil
+        if type(label)=="string" and label~="" then return label end
     end
-    local info = C_LFGList.GetActivityInfoTable(activityID)
-    if not info then return nil end
-    -- The helper is supplied by Blizzard_GroupFinder_VanillaStyle.
-    if type(LFGUtil_GetActivityInfoName) == "function" then
-        return LFGUtil_GetActivityInfoName(info)
+    for _,field in ipairs({"fullName","shortName","name"}) do
+        local label=Readable(info[field])
+        if type(label)=="string" and label~="" then return label end
     end
-    return info.fullName or info.shortName or info.name or ("Activity " .. activityID)
+    return "Activity "..activityID
 end
 
-local function ResultActivityName(info)
-    local ids = Readable(info and info.activityIDs)
-    if type(ids) == "table" and type(ids[1]) == "number" then
-        return ActivityDisplayName(ids[1]) or "group"
+local function ResultActivityNames(info)
+    local ids=ResultActivityIDs(info)
+    local names={}
+    local selected=state.activityID
+    -- When searching one dungeon, show the matching dungeon first, even if
+    -- Blizzard lists it as the second or third activity for this group.
+    if selected then
+        for _,id in ipairs(ids) do
+            if id==selected then
+                names[#names+1]=ActivityDisplayName(id) or ("Activity "..id)
+                break
+            end
+        end
     end
-    return state.activityName or "group"
+    for _,id in ipairs(ids) do
+        if id~=selected then
+            names[#names+1]=ActivityDisplayName(id) or ("Activity "..id)
+        end
+    end
+    return names
+end
+
+local function ResultActivityName(info,mode)
+    local names=ResultActivityNames(info)
+    if #names==0 then return state.activityName or "group" end
+    local label=table.concat(names," / ")
+    if mode=="compact" and #names>1 then
+        return names[1].." (+"..(#names-1).." more)"
+    end
+    if mode=="row" and #label>33 and #names>1 then
+        return names[1].." (+"..(#names-1).." more)"
+    end
+    return label
 end
 
 -- Group Finder's generalPlaystyle enum is distinct from its older playstyle
@@ -587,6 +635,13 @@ local function BuildMessage(info)
         end
         message = Resolve()
     end
+    -- Three full dungeon names can make an otherwise valid whisper exceed
+    -- WoW's 255-byte limit. Compact the activity list only when necessary,
+    -- preserving the selected matching activity and all party member names.
+    if #message>255 and info and template:find("{activity}",1,true) then
+        parts.activity=ResultActivityName(info,"compact")
+        message=Resolve()
+    end
     return message
 end
 
@@ -746,8 +801,8 @@ local ROLE_TARGETS = {
     [40] = {TANK=4, HEALER=10, DAMAGER=26},
 }
 local function GetMaxMembers(info)
-    local ids = Readable(info and info.activityIDs)
-    if type(ids) ~= "table" then return nil end
+    local ids=ResultActivityIDs(info)
+    if #ids==0 then return nil end
     local maxMembers
     for _, activityID in ipairs(ids) do
         if type(Readable(activityID)) == "number" and C_LFGList and C_LFGList.GetActivityInfoTable then
@@ -968,18 +1023,14 @@ local function RebuildVisibleResults(resetPage)
             local count = Readable(info.numMembers)
             local removed = Readable(info.isDelisted)
             if removed == true then MatchSent(id, info) end
-            local ids = Readable(info.activityIDs)
-            local match = state.categoryID == nil and state.activityID == nil
-            if type(ids) == "table" then
-                for _, activityID in ipairs(ids) do
-                    if type(Readable(activityID)) == "number" then
-                        if state.activityID and activityID == state.activityID then
-                            match = true; break
-                        elseif state.categoryID and not state.activityID
-                            and state.categoryAllIDs and state.categoryAllIDs[activityID] then
-                            match = true; break
-                        end
-                    end
+            local ids=ResultActivityIDs(info)
+            local match=state.categoryID==nil and state.activityID==nil
+            for _,activityID in ipairs(ids) do
+                if state.activityID and activityID==state.activityID then
+                    match=true;break
+                elseif state.categoryID and not state.activityID
+                    and state.categoryAllIDs and state.categoryAllIDs[activityID] then
+                    match=true;break
                 end
             end
             if not state.suppressedIDs[id] and (pinned or match) and removed ~= true
