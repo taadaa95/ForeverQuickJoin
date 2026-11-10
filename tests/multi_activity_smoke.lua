@@ -53,6 +53,8 @@ setmetatable(env,{__index=_G})
 local compiled=assert(loadstring(table.concat({
     Piece("ResultActivityIDs","SentIdentity"),
     Piece("SentIdentity","SentStartTime"),
+    Piece("SentStartTime","RemoveSent"),
+    Piece("MatchSent","SnapshotSentInfo"),
     Piece("ActivityDisplayName","ResultActivityNames"),
     Piece("ResultActivityNames","ResultActivityName"),
     Piece("ResultActivityName","ResultPlaystyle"),
@@ -60,10 +62,10 @@ local compiled=assert(loadstring(table.concat({
     Piece("BuildMessage","Status"),
     Piece("SearchCoversSent","MatchSent"),
     Piece("RebuildVisibleResults","SaveAdvanced"),
-    "return ResultActivityIDs,SentIdentity,ResultActivityNames,ResultActivityName,GetMaxMembers,BuildMessage,SearchCoversSent,RebuildVisibleResults",
+    "return ResultActivityIDs,SentIdentity,ResultActivityNames,ResultActivityName,GetMaxMembers,BuildMessage,SearchCoversSent,RebuildVisibleResults,MatchSent",
 },"\n")))
 setfenv(compiled,env)
-local ids,key,activityNames,label,maxMembers,message,covers,rebuild=compiled()
+local ids,key,activityNames,label,maxMembers,message,covers,rebuild,matchSent=compiled()
 env.ResultActivityIDs=ids
 env.SentIdentity=key
 env.ActivityDisplayName=function(id)return names[id]end
@@ -71,6 +73,7 @@ env.ResultActivityNames=activityNames
 env.ResultActivityName=label
 env.GetMaxMembers=maxMembers
 env.BuildMessage=message
+env.RemoveSent=function(record,reason) env.retired={record=record,reason=reason} end
 
 local info={leaderName="Leader",activityIDs={101,202,303},name="Dungeon runs",
     isDelisted=false,numMembers=2}
@@ -140,6 +143,24 @@ assert(covers({activityIDs={202}},record),
 assert(covers({activityIDs={303}},record))
 assert(not covers({activityIDs={404}},record))
 assert(not covers(nil,record))
+-- A change to the dungeon selection on the SAME group preserves Sent only
+-- when both the leader and listing creation time remain consistent.
+env.state.sentByID={}
+env.state.sentByListing={}
+local original={leaderName="Leader",activityIDs={101,202},age=20}
+local recordSent={key=key(8,original),leader="Leader",started=80,id=8}
+env.state.sentByID[8]=recordSent
+env.state.sentByListing[recordSent.key]=recordSent
+local expanded={leaderName="Leader",activityIDs={202,303,101},age=20}
+assert(matchSent(8,expanded)==recordSent,"adding an activity to the same listing keeps Sent")
+assert(recordSent.key==key(8,expanded),"Sent identity must update to new set")
+assert(env.state.sentByListing[recordSent.key]==recordSent)
+assert(env.state.sentByListing[key(8,original)]==nil,"old canonical key must be cleared")
+
+local replaced={leaderName="Different Leader",activityIDs={202,303,101},age=20}
+assert(matchSent(8,replaced)==nil,"same result ID with another leader is not the same listing")
+assert(env.retired==nil,"unrelated listing must not trigger false lifecycle transition")
+
 -- Source checks for the visual and app integration paths that require WoW frames.
 assert(source:find("row.detailsActivities:SetShown(multiple)",1,true),
     "expanded row must reveal all activities")
