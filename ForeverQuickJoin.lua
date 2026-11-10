@@ -1591,10 +1591,16 @@ local function SearchFromClick()
     -- This matches the exact call shape used by LFG Forever's Search button.
     state.searchAttemptActive = true
     state.searchAttemptAt = GetTime()
+    -- The user can change dropdowns before search results arrive; retain
+    -- the exact activities that were submitted on this physical click.
+    local searchedActivities={}
+    for _,activityID in ipairs(activities) do searchedActivities[#searchedActivities+1]=activityID end
+    state.pendingSearch={categoryID=state.categoryID,activityIDs=searchedActivities}
     local response = C_LFGList.Search(state.categoryID, 0, 0, nil, false, nil, activities)
     state.searchAttemptActive = false
-    if state.searchBlocked then return end
+    if state.searchBlocked then state.pendingSearch=nil;return end
     if response == false then
+        state.pendingSearch=nil
         Status("WoW refused the search. Previously cached listings remain available.")
         return
     end
@@ -1606,6 +1612,7 @@ local function SearchFromClick()
         state.timeout = C_Timer.NewTimer(15, function()
             if not state.searching then return end
             state.searching = false
+            state.pendingSearch=nil
             state.timeout = nil
             UpdateSearchButton()
             Status("Search timed out; click Search to retry. Older cached results remain visible.")
@@ -1614,16 +1621,20 @@ local function SearchFromClick()
 end
 
 local function FinishSearch(failed, reason)
-    state.searching = false
+    local search=state.searching and state.pendingSearch or nil
+    state.pendingSearch=nil
+    state.searching=false
     if state.timeout and state.timeout.Cancel then state.timeout:Cancel() end
-    state.timeout = nil
+    state.timeout=nil
     UpdateSearchButton()
     if failed then
-        reason = Readable(reason)
-        Status(type(reason) == "string" and reason ~= "" and ("Search failed: " .. Truncate(reason, 105))
+        reason=Readable(reason)
+        Status(type(reason)=="string" and reason~="" and ("Search failed: "..Truncate(reason,105))
             or "Search failed. You can retry; previously cached listings remain available.")
     else
-        RefreshResults(true)
+        -- Results from Blizzard's own finder or other addons should not
+        -- masquerade as a finished QuickJoin search of our activity scope.
+        RefreshResults(search~=nil,search)
     end
 end
 
@@ -2329,7 +2340,17 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
     elseif event == "PLAYER_LOGIN" then
         CreateMinimapButton()
         SyncDefaultForParty()
-        Print("v0.7.4 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        -- Cache housekeeping only: never initiate a server search on a timer.
+        -- This also cleans up Sent rows if QuickJoin is left open for an hour.
+        if C_Timer and type(C_Timer.NewTicker)=="function"
+            and not state.sentExpiryTicker then
+            state.sentExpiryTicker=C_Timer.NewTicker(30,function()
+                if PruneExpiredSent() and window and window:IsShown() then
+                    RefreshResults(false)
+                end
+            end)
+        end
+        Print("v0.7.5 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
@@ -2337,6 +2358,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
         if state.searchAttemptActive or (recentSearch and detailText:find("Search", 1, true)) then
             state.searchBlocked = true
             state.searching = false
+            state.pendingSearch=nil
             if state.timeout and state.timeout.Cancel then state.timeout:Cancel() end
             state.timeout = nil
             UpdateSearchButton()
