@@ -185,8 +185,28 @@ local function MatchSent(id, info)
     end
     local key = SentIdentity(id, info)
     local record = state.sentByID[id]
-    if record and record.key ~= key then record = nil end
-    if not record and key then record = state.sentByListing[key] end
+    if record and record.key ~= key then
+        -- A leader can edit the advertised dungeons on an existing listing.
+        -- Preserve Sent only when the result ID, leader and creation time
+        -- still identify the same listing; never trust the ID alone.
+        local currentLeader=Readable(info.leaderName)
+        local started=SentStartTime(info)
+        local sameLeader=type(currentLeader)=="string"
+            and type(record.leader)=="string"
+            and currentLeader:lower()==record.leader:lower()
+        if key and sameLeader and record.started and started
+            and math.abs(record.started-started)<=90
+            and (not state.sentByListing[key] or state.sentByListing[key]==record) then
+            if state.sentByListing[record.key]==record then
+                state.sentByListing[record.key]=nil
+            end
+            record.key=key
+            state.sentByListing[key]=record
+        else
+            record=nil
+        end
+    end
+    if not record and key then record=state.sentByListing[key] end
     if not record then return nil end
     -- A matching leader can make a *new* group with the same activity/title.
     -- Its age will reset; do not mark that brand-new listing as contacted.
@@ -233,7 +253,7 @@ end
 local function MarkSent(id, info, leader)
     local key = SentIdentity(id, info)
     if not key then return end
-    local old = state.sentByListing[key]
+    local old=state.sentByListing[key] or MatchSent(id,info)
     if old then
         local started=SentStartTime(info)
         if not old.started or not started or math.abs(old.started-started)<=90 then
