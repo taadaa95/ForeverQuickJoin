@@ -14,8 +14,9 @@ local names={
     [404]="Scarlet Monastery",
 }
 local caps={[101]=5,[202]=5,[303]=5,[404]=10}
-local env={
-    Readable=function(value)return value end,
+local env={}
+env.Readable=function(value)return value end
+local initial={
     db={sortOrder="default"},
     state={activityID=nil,categoryID=2,categoryAllIDs={[101]=true,[202]=true,[303]=true,[404]=true},
         cachedResults={},results={},sentByListing={},sentByID={}},
@@ -45,6 +46,7 @@ local env={
     template="L{level} {class} {role} LFG {activity}",
     PREFIX="[QuickJoin]",
 }
+for k,v in pairs(initial) do env[k]=v end
 env._results={}
 setmetatable(env,{__index=_G})
 local compiled=assert(loadstring(table.concat({
