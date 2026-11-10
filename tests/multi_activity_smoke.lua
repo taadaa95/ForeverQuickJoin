@@ -19,7 +19,8 @@ env.Readable=function(value)return value end
 local initial={
     db={sortOrder="default"},
     state={activityID=nil,categoryID=2,categoryAllIDs={[101]=true,[202]=true,[303]=true,[404]=true},
-        cachedResults={},results={},sentByListing={},sentByID={}},
+        cachedResults={},results={},sentByListing={},sentByID={},
+        pinnedRealIDs={},suppressedIDs={},totalInCache=1},
     C_LFGList={
         GetActivityInfoTable=function(id)
             if not names[id] then return nil end
