@@ -35,7 +35,20 @@ jobs:
         id: package
         run: python3 scripts/package_release.py
 
+      - name: Validate CurseForge upload archive and metadata (offline)
+        env:
+          RELEASE_TAG: ${{ steps.package.outputs.tag }}
+          RELEASE_ZIP: ${{ steps.package.outputs.zip }}
+          RELEASE_NOTES: ${{ steps.package.outputs.notes }}
+        run: |
+          python3 scripts/upload_curseforge.py \
+            --file "$RELEASE_ZIP" \
+            --notes "$RELEASE_NOTES" \
+            --tag "$RELEASE_TAG" \
+            --dry-run
+
       - name: Publish version if not already released
+        id: github_release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.package.outputs.tag }}
@@ -46,6 +59,7 @@ jobs:
           set -euo pipefail
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $RELEASE_TAG already exists; leaving it unchanged."
+            echo "created=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           gh release create "$RELEASE_TAG" "$RELEASE_ZIP" \
@@ -54,3 +68,27 @@ jobs:
             --title "Forever QuickJoin $RELEASE_TAG" \
             --notes-file "$RELEASE_NOTES" \
             --latest
+          echo "created=true" >> "$GITHUB_OUTPUT"
+
+      # Do not re-upload existing versions on unrelated source/doc changes.
+      # This step activates only after CURSEFORGE_API_TOKEN is added to the
+      # repository's Actions secrets. Tokens are never stored in the source.
+      - name: Submit newly published release to CurseForge
+        if: steps.github_release.outputs.created == 'true'
+        env:
+          CURSEFORGE_API_TOKEN: ${{ secrets.CURSEFORGE_API_TOKEN }}
+          CURSEFORGE_GAME_VERSION_ID: ${{ vars.CURSEFORGE_GAME_VERSION_ID }}
+          RELEASE_TAG: ${{ steps.package.outputs.tag }}
+          RELEASE_ZIP: ${{ steps.package.outputs.zip }}
+          RELEASE_NOTES: ${{ steps.package.outputs.notes }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${CURSEFORGE_API_TOKEN:-}" ]; then
+            echo "::notice::CurseForge upload not configured: add CURSEFORGE_API_TOKEN in repository Actions secrets."
+            exit 0
+          fi
+          python3 scripts/upload_curseforge.py \
+            --file "$RELEASE_ZIP" \
+            --notes "$RELEASE_NOTES" \
+            --tag "$RELEASE_TAG"
