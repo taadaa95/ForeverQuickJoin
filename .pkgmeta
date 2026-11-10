@@ -1,0 +1,12 @@
+# CurseForge packages Git tags directly from GitHub. Only ship WoW addon
+# files; GitHub Actions uses scripts/package_release.py for its own ZIP.
+package-as: ForeverQuickJoin
+enable-nolib-creation: no
+ignore:
+  - scripts
+  - tests
+  - README.md
+  - CHANGELOG.md
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
