@@ -1,4 +1,4 @@
--- Forever QuickJoin v0.7.3: session-only contacted groups and leader replies.
+-- Forever QuickJoin v0.7.5: preserve application history when a Sent listing expires.
 -- All queries/searches remain explicitly user initiated. No whispers are saved.
 local Apps = {}
 ForeverQuickJoinApplications = Apps
@@ -85,13 +85,15 @@ local function Refresh()
             row:Hide()
         else
             row:Show()
-            local status=entry.ended and "Listing ended" or (entry.replies>0 and "Replied" or "Sent")
+            local status=entry.ended and "Listing ended" or
+                (entry.unavailable and "Not in Finder" or (entry.replies>0 and "Replied" or "Sent"))
             local name=entry.title~="" and entry.title or entry.activity
             row.title:SetText(Display(name):sub(1,50))
             row.info:SetText(Display(entry.leader):sub(1,24).."  ·  "..
                 (entry.unread>0 and ("|cffffd45f"..entry.unread.." new|r") or
                     (entry.ended and "|cffaaaaaaEnded|r" or
-                    (entry.replies>0 and "|cff69e3a2Replied|r" or "|cff69e3a2Sent|r"))))
+                    (entry.unavailable and "|cffaaaaaaNot in Finder|r" or
+                    (entry.replies>0 and "|cff69e3a2Replied|r" or "|cff69e3a2Sent|r")))))
             row:SetBackdropColor(selected==entry and .16 or .085,
                 selected==entry and .21 or .105,selected==entry and .28 or .14,1)
         end
@@ -105,7 +107,8 @@ local function Refresh()
     end
     detailsTitle:SetText(Display(selected.title~="" and selected.title or selected.activity))
     local status=selected.ended and "Listing ended" or
-        (selected.replies>0 and "Replied" or "Sent (delivery unconfirmed)")
+        (selected.unavailable and "No longer verified in Finder" or
+        (selected.replies>0 and "Replied" or "Sent (delivery unconfirmed)"))
     detailsInfo:SetText(Display(selected.leader).." · "..status..
         " · "..selected.sentCount.." whisper"..(selected.sentCount==1 and "" or "s"))
     replyButton:Enable()
@@ -147,6 +150,7 @@ function Apps.TrackSent(record,info,message)
         table.insert(entries,1,entry)
     else
         entry.ended=false
+        entry.unavailable=false
     end
     local title=Plain(info.name)
     entry.title=title or entry.title
@@ -174,6 +178,17 @@ function Apps.ListingEnded(record)
     local entry=record and byRecord[record]
     if entry then
         entry.ended=true
+        entry.unavailable=false
+        Refresh()
+    end
+end
+
+function Apps.ListingUnavailable(record)
+    local entry=record and byRecord[record]
+    if entry and not entry.ended then
+        -- Search absence and timeout are not proof of a disband. Keep the
+        -- conversation, allowing a delayed reply to be attributed accurately.
+        entry.unavailable=true
         Refresh()
     end
 end
@@ -302,7 +317,7 @@ function Apps.Attach(parent)
         end
     end)
     Label(right,"Reply prepares chat; press Enter to send.",177,402,277,25)
-    Label(panel,"Sent means submitted, not delivered. No reply is inferred from silence.",
+    Label(panel,"Not in Finder means unverified; it does not prove the group disbanded.",
         17,683,780,22,"GameFontHighlightSmall")
     panel:Hide()
     UpdateTab()
