@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.5 — 2026-11-10
+
+- Fixed contacted groups lingering in Find Groups long after Blizzard stopped listing them. QuickJoin no longer re-pins an old search result ID merely because the client still returns cached details.
+- On a successfully completed manual Search covering the contacted activity, remove absent Sent listings immediately **when the result set is complete**. Incomplete/capped or unrelated searches do not incorrectly claim a disband.
+- Keep cached Sent listings from unrelated searches for at most 10 minutes after their last verified appearance, then remove them from Finder automatically via local housekeeping. This does **not** initiate background Group Finder searches.
+- Prevent expired Blizzard result IDs from resurfacing through local refreshes until a new completed search actually returns those IDs.
+- Retain whisper conversations in My Applications after Finder eviction; show **Not in Finder** rather than falsely asserting the listing disbanded. Explicit server delisting still displays **Listing ended**.
+- Capture the activity scope at the player's Search click, so changing dropdowns while the server responds cannot invalidate unrelated listings.
+- Added Lua 5.1 regression tests for complete/truncated search results, changed activities, cache expiry, suppression, revalidation, and late leader replies.
+- README intentionally unchanged.
+
 ## 0.7.4 — 2026-11-09
 
 - Added **Ignore team composition** to Advanced Filters for unconventional dungeon/raid groups (e.g. four DPS or four tanks).
