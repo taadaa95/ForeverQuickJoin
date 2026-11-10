@@ -1396,57 +1396,66 @@ local function MergeWhoLocation()
     if window and window:IsShown() and state.expandedResultID then UpdatePages() end
 end
 
-local function RefreshResults(freshSearch)
+local function RefreshResults(freshSearch, search)
     if not C_LFGList or not C_LFGList.GetFilteredSearchResults then return end
-    local ok, total, ids = pcall(C_LFGList.GetFilteredSearchResults)
-    if ok and ids == nil and total == 0 then ids = {} end
-    if not ok or type(Readable(ids)) ~= "table" then
+    local ok,total,ids=pcall(C_LFGList.GetFilteredSearchResults)
+    if ok and ids==nil and total==0 then ids={} end
+    if not ok or type(Readable(ids))~="table" then
         Status("Couldn't read the search results.")
         return
     end
-    if freshSearch==true then TrackSearchAppearances(ids) end
-    state.cachedResults = {}
-    state.rosterClassCache = {}
-    state.pinnedRealIDs = {}
+    -- Only a completed click-initiated query is fresh evidence. Reading
+    -- GetSearchResultInfo on an old ID can return a cached, defunct group.
+    if freshSearch==true then
+        TrackSearchAppearances(ids)
+        state.suppressedIDs={}
+    else
+        PruneExpiredSent()
+    end
+    -- When the server indicates more results than returned, absence is not
+    -- conclusive: this result set may have been truncated.
+    local reported=Readable(total)
+    local complete=type(reported)=="number" and reported>=0 and reported<=#ids
+    local now=type(GetTime)=="function" and GetTime() or 0
+    state.cachedResults={}
+    state.rosterClassCache={}
+    state.pinnedRealIDs={}
     local found={}
-    for _, id in ipairs(ids) do
-        if type(Readable(id)) == "number" then
-            table.insert(state.cachedResults, id)
+    for _,id in ipairs(ids) do
+        if type(Readable(id))=="number" and not state.suppressedIDs[id] then
+            state.cachedResults[#state.cachedResults+1]=id
             local info,verified=ResultInfo(id)
             if verified then
                 local rec=MatchSent(id,info)
                 if rec then
                     found[rec]=true
                     state.pinnedRealIDs[id]=true
-                    -- The new live result is preferable to its older snapshot.
+                    -- The result is validated by a NEW search, not by the
+                    -- existence of its cached result ID.
+                    if freshSearch==true then rec.lastConfirmedAt=now end
                     rec.snapshot=SnapshotSentInfo(info,id)
                 end
             end
         end
     end
-    -- Search results are scoped and often capped; a missing record is NOT proof
-    -- of disbanding. Keep a cached Sent row until the client confirms delisting
-    -- or reports a new listing with a different creation time.
+    local retire={}
     for _,rec in pairs(state.sentByListing) do
-        if not found[rec] and rec.snapshot then
-            local info,verified=ResultInfo(rec.id)
-            if verified then
-                if info.isDelisted==true then
-                    RemoveSent(rec)
-                elseif SentIdentity(rec.id,info)==rec.key then
-                    found[rec]=true
-                    state.pinnedRealIDs[rec.id]=true
-                    state.cachedResults[#state.cachedResults+1]=rec.id
-                    rec.snapshot=SnapshotSentInfo(info,rec.id)
-                else
-                    state.cachedResults[#state.cachedResults+1]=rec.virtualID
-                end
-            else
+        if not found[rec] then
+            local last=rec.lastConfirmedAt or rec.at
+            local expired=type(last)=="number" and now-last>=SENT_UNVERIFIED_TTL
+            local absentFromCoveredSearch=freshSearch==true and complete
+                and SearchCoversSent(search,rec)
+            if expired or absentFromCoveredSearch then
+                retire[#retire+1]=rec
+            elseif rec.snapshot and rec.virtualID then
+                -- A temporary cross-activity cache entry is visually marked
+                -- Sent* and has no Whisper action. Never revive rec.id here.
                 state.cachedResults[#state.cachedResults+1]=rec.virtualID
             end
         end
     end
-    state.totalInCache = #state.cachedResults
+    for _,rec in ipairs(retire) do RemoveSent(rec,"unavailable") end
+    state.totalInCache=#state.cachedResults
     RebuildVisibleResults(true)
 end
 
