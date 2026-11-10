@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.7 — 2026-11-10
+
+- Added complete support for group listings advertising multiple dungeon activities (WoW Forever allows several activities on one listing).
+- Finder activity matching now checks **every** advertised activity ID, including when the selected dungeon is the second or third. Each group still appears just once in search results.
+- Finder rows show the selected matching dungeon first and a **+N** indicator when the full list does not fit. Hover to see every dungeon; expanded group details include all advertised activities.
+- The outgoing `{activity}` whisper placeholder includes all advertised activities, prioritizing the currently selected dungeon. If the full list would exceed WoW's 255-byte whisper limit, it falls back to a concise **(+N more)** activity description.
+- Sent tracking and NEW-listing identity now use a canonical, order-independent set of activity IDs. Reordering dungeons no longer loses the Sent marker.
+- When a leader edits an existing listing to change its activities, QuickJoin can retain Sent if the original result ID, leader and listing creation time still identify the same listing.
+- Group-size inference, cached snapshots and My Applications conversations now account for all advertised activities. Legacy single-activity API fields remain supported.
+- Added Lua 5.1 regression tests for single/multiple matches, filtering, deduplication, whisper length, and edited listing identities.
+- README intentionally unchanged.
+
 ## 0.7.6 — 2026-11-10
 
 - Replaced the two Forever/Modern header buttons with one compact **Theme** dropdown.
