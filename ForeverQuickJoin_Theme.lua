@@ -1,4 +1,4 @@
--- Forever QuickJoin v0.7.1: flat graphite/blue Modern UI and exact Forever restoration.
+-- Forever QuickJoin v0.7.6: dropdown theme selector with reversible transparency.
 -- QuickJoin-owned frames only. Never modifies Blizzard's protected windows.
 local Theme = {}
 ForeverQuickJoinTheme = Theme
@@ -6,6 +6,8 @@ ForeverQuickJoinTheme = Theme
 local unpack = table.unpack or unpack
 local root, advanced
 local active = "Forever"
+local transparent = false
+local themeDropdown
 local baseBackdrops = setmetatable({}, {__mode="k"})
 local baseFonts = setmetatable({}, {__mode="k"})
 local baseFontColors = setmetatable({}, {__mode="k"})
@@ -13,7 +15,6 @@ local nativeTextures = setmetatable({}, {__mode="k"})
 local buttonSkins = setmetatable({}, {__mode="k"})
 local hovering = setmetatable({}, {__mode="k"})
 local chrome = {}
-local foreverButton, modernButton
 
 -- Restrained, high-contrast graphite rather than saturated turquoise.
 -- One blue accent is reserved for important actions and section headings.
@@ -34,8 +35,20 @@ local function Safe(object, name, ...)
     end
 end
 
+-- Background-only transparency. SetAlpha on a parent would also fade its
+-- text, icons, controls, and borders, so it is deliberately never used.
+local function BackgroundAlpha(frame)
+    if not transparent then return 1 end
+    local name=Safe(frame,"GetName")
+    if frame==root or frame==advanced
+        or name=="ForeverQuickJoinHostingPanel"
+        or name=="ForeverQuickJoinApplicationsPanel"
+        or name=="ForeverQuickJoinRoleManager" then return .58 end
+    return .70
+end
+
 local function Color(frame,rgb)
-    Safe(frame,"SetBackdropColor",rgb[1],rgb[2],rgb[3],1)
+    Safe(frame,"SetBackdropColor",rgb[1],rgb[2],rgb[3],BackgroundAlpha(frame))
 end
 
 local function CopyBackdrop(value)
@@ -54,6 +67,7 @@ local function PaletteFor(frame)
     local name=Safe(frame,"GetName")
     if frame==root or frame==advanced
         or name=="ForeverQuickJoinHostingPanel"
+        or name=="ForeverQuickJoinApplicationsPanel"
         or name=="ForeverQuickJoinRoleManager" then return P.canvas,P.border end
     local w,h=Safe(frame,"GetWidth"),Safe(frame,"GetHeight")
     if type(w)=="number" and type(h)=="number" then
@@ -89,7 +103,8 @@ local function StyleBackdrop(frame)
         Safe(frame,"SetBackdropBorderColor",border[1],border[2],border[3],1)
     else
         frame:SetBackdrop(saved.config)
-        Safe(frame,"SetBackdropColor",unpack(saved.color))
+        Safe(frame,"SetBackdropColor",saved.color[1],saved.color[2],saved.color[3],
+            saved.color[4]*BackgroundAlpha(frame))
         Safe(frame,"SetBackdropBorderColor",unpack(saved.border))
     end
 end
@@ -159,7 +174,6 @@ local function ButtonKind(text)
         or text=="Open Blizzard Listing"
         or text:find("Review / Fix Roles",1,true)
         or text=="Change Roles" then return "primary" end
-    if text=="[Modern]" or text=="[Forever]" then return "selected" end
     return "secondary"
 end
 
@@ -274,14 +288,15 @@ local function AddChrome(window,drawer)
     if drawer then Stroke(drawer,34,1) end
 end
 
-local function UpdateToggles()
-    if foreverButton then foreverButton:SetText(active=="Forever" and "[Forever]" or "Forever") end
-    if modernButton then modernButton:SetText(active=="Modern" and "[Modern]" or "Modern") end
+local function UpdateDropdown()
+    if themeDropdown and type(themeDropdown.OverrideText)=="function" then
+        themeDropdown:OverrideText(active)
+    end
 end
 
 function Theme.ApplyNew()
     if not root then return end
-    UpdateToggles()
+    UpdateDropdown()
     Visit(root,{},{count=0})
     -- The drawer can be positioned outside the root but is still its child.
     -- Check it explicitly for client layouts where ownership changes.
@@ -291,15 +306,35 @@ function Theme.ApplyNew()
     end
 end
 
+local function RefreshParty()
+    if ForeverQuickJoinParty and ForeverQuickJoinParty.Refresh then
+        ForeverQuickJoinParty.Refresh(false)
+    end
+end
+
 function Theme.Select(name)
     if name~="Forever" and name~="Modern" then return end
     active=name
     ForeverQuickJoinDB=ForeverQuickJoinDB or {}
     ForeverQuickJoinDB.theme=name
     Theme.ApplyNew() -- immediate; no reload or protected action
-    if ForeverQuickJoinParty and ForeverQuickJoinParty.Refresh then
-        ForeverQuickJoinParty.Refresh(false)
-    end
+    RefreshParty()
+end
+
+function Theme.SetTransparency(enabled)
+    transparent=enabled==true
+    ForeverQuickJoinDB=ForeverQuickJoinDB or {}
+    ForeverQuickJoinDB.themeTransparency=transparent
+    Theme.ApplyNew() -- immediate in either theme
+    RefreshParty()
+end
+
+function Theme.ToggleTransparency()
+    Theme.SetTransparency(not transparent)
+end
+
+function Theme.Current()
+    return active,transparent
 end
 
 function Theme.RowHover(row,entered)
@@ -308,7 +343,7 @@ function Theme.RowHover(row,entered)
         Color(row,entered and P.neutralHover or P.card)
     else
         Safe(row,"SetBackdropColor",entered and .17 or .10,
-            entered and .20 or .12,entered and .27 or .16,1)
+            entered and .20 or .12,entered and .27 or .16,BackgroundAlpha(row))
     end
 end
 
@@ -316,19 +351,31 @@ function Theme.Attach(window,drawer,rows)
     if root then return end
     root,advanced=window,drawer
     active=(ForeverQuickJoinDB and ForeverQuickJoinDB.theme=="Modern") and "Modern" or "Forever"
+    transparent=ForeverQuickJoinDB and ForeverQuickJoinDB.themeTransparency==true or false
     local title=window:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
     title:SetPoint("TOPLEFT",window,"TOPLEFT",247,-22)
     title:SetText("Theme:")
-    local function Toggle(label,x,w,handler)
-        local button=CreateFrame("Button",nil,window,"UIPanelButtonTemplate")
-        button:SetPoint("TOPLEFT",window,"TOPLEFT",x,-13)
-        button:SetSize(w,27)
-        button:SetText(label)
-        button:SetScript("OnClick",handler)
-        return button
-    end
-    foreverButton=Toggle("Forever",293,80,function() Theme.Select("Forever") end)
-    modernButton=Toggle("Modern",374,80,function() Theme.Select("Modern") end)
+    themeDropdown=CreateFrame("DropdownButton",nil,window,"WowStyle1DropdownTemplate")
+    themeDropdown:SetWidth(160)
+    themeDropdown:SetPoint("TOPLEFT",window,"TOPLEFT",291,-12)
+    themeDropdown:SetDefaultText("Forever")
+    themeDropdown:SetupMenu(function(_,menu)
+        menu:SetTag("MENU_FOREVER_QUICKJOIN_THEME")
+        menu:CreateRadio("Forever",
+            function() return active=="Forever" end,
+            function() Theme.Select("Forever") end)
+        menu:CreateRadio("Modern",
+            function() return active=="Modern" end,
+            function() Theme.Select("Modern") end)
+        menu:CreateDivider()
+        local checkbox=menu:CreateCheckbox("Transparency",
+            function() return transparent end,
+            function() Theme.ToggleTransparency() end)
+        -- Checkbox state should not change the dropdown's theme caption.
+        if checkbox and type(checkbox.SetSelectionIgnored)=="function" then
+            checkbox:SetSelectionIgnored()
+        end
+    end)
     AddChrome(window,drawer)
     Theme.ApplyNew()
 end
