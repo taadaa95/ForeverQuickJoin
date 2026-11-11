@@ -1799,9 +1799,9 @@ local function CreateWindow()
     grip:SetSize(18,18)
     grip:SetPoint("BOTTOMRIGHT",window,"BOTTOMRIGHT",-2,2)
     grip:SetFrameLevel(window:GetFrameLevel()+35)
-    grip:SetNormalTexture("Interface\ChatFrame\UI-ChatIM-SizeGrabber-Up")
-    grip:SetHighlightTexture("Interface\ChatFrame\UI-ChatIM-SizeGrabber-Highlight")
-    grip:SetPushedTexture("Interface\ChatFrame\UI-ChatIM-SizeGrabber-Down")
+    grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
     local resizeX,resizeY,resizeScale
     local function StopResize()
         if not resizeX then return end
