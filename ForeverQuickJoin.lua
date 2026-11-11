@@ -1771,29 +1771,7 @@ local function ClampWindowScale(value)
     return math.max(0.70, math.min(1.45,value))
 end
 
-local function CreateWindow()
-    if window then return window end
-    window = CreateFrame("Frame", "ForeverQuickJoinWindow", UIParent, "BackdropTemplate")
-    window:SetSize(840, 785)
-    window:SetScale(ClampWindowScale(db and db.windowScale or 1))
-    window:SetPoint("CENTER")
-    window:SetFrameStrata("DIALOG")
-    window:SetClampedToScreen(true)
-    window:SetMovable(true)
-    window:EnableMouse(true)
-    window:RegisterForDrag("LeftButton")
-    window:SetScript("OnDragStart", function(self) self:StartMoving() end)
-    window:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-    window:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 32, edgeSize = 32,
-        insets = { left = 0, right = 0, top = 0, bottom = 0 },
-    })
-    window:SetBackdropColor(0.035, 0.045, 0.065, 1)
-    -- DialogBox background has transparent pixels even at alpha 1. The solid
-    -- white texture, tinted dark and fully opaque, closes every pixel.
-    window:SetAlpha(1)
+local function AttachResizeGrip(window)
     -- Resize from the bottom-right corner. Right-click restores 100% size.
     local grip=CreateFrame("Button",nil,window)
     grip:SetSize(18,18)
@@ -1842,12 +1820,9 @@ local function CreateWindow()
         GameTooltip:Show()
     end)
     grip:SetScript("OnLeave",function() if GameTooltip then GameTooltip:Hide() end end)
-    MakeLabel(window, "Forever QuickJoin", "GameFontNormalLarge", 24, -17, 400, 26)
-    local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -7, -6)
-    close:SetScript("OnClick", function() window:Hide() end)
-    if UISpecialFrames then table.insert(UISpecialFrames, "ForeverQuickJoinWindow") end
+end
 
+local function BuildSearchControls(window)
     categoryDropdown = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
     categoryDropdown:SetWidth(170)
     categoryDropdown:SetPoint("TOPLEFT", window, "TOPLEFT", 22, -53)
@@ -1944,6 +1919,39 @@ local function CreateWindow()
     end)
     MakeLabel(window, "Search retrieves groups on click. Filters and sorting are in Advanced Filters.",
         "GameFontHighlightSmall", 275, -95, 350, 21)
+end
+
+local function CreateWindow()
+    if window then return window end
+    window = CreateFrame("Frame", "ForeverQuickJoinWindow", UIParent, "BackdropTemplate")
+    window:SetSize(840, 785)
+    window:SetScale(ClampWindowScale(db and db.windowScale or 1))
+    window:SetPoint("CENTER")
+    window:SetFrameStrata("DIALOG")
+    window:SetClampedToScreen(true)
+    window:SetMovable(true)
+    window:EnableMouse(true)
+    window:RegisterForDrag("LeftButton")
+    window:SetScript("OnDragStart", function(self) self:StartMoving() end)
+    window:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+    window:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true, tileSize = 32, edgeSize = 32,
+        insets = { left = 0, right = 0, top = 0, bottom = 0 },
+    })
+    window:SetBackdropColor(0.035, 0.045, 0.065, 1)
+    -- DialogBox background has transparent pixels even at alpha 1. The solid
+    -- white texture, tinted dark and fully opaque, closes every pixel.
+    window:SetAlpha(1)
+    AttachResizeGrip(window)
+    MakeLabel(window, "Forever QuickJoin", "GameFontNormalLarge", 24, -17, 400, 26)
+    local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
+    close:SetPoint("TOPRIGHT", -7, -6)
+    close:SetScript("OnClick", function() window:Hide() end)
+    if UISpecialFrames then table.insert(UISpecialFrames, "ForeverQuickJoinWindow") end
+
+    BuildSearchControls(window)
     advancedButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
     advancedButton:SetSize(168, 26)
     advancedButton:SetPoint("TOPLEFT", window, "TOPLEFT", 641, -89)
