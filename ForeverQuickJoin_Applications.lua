@@ -72,7 +72,7 @@ local function NotifyReply(entry)
     if type(PlaySound)=="function" and type(SOUNDKIT)=="table" and SOUNDKIT.TELL_MESSAGE then
         PlaySound(SOUNDKIT.TELL_MESSAGE,"Master")
     elseif type(PlaySoundFile)=="function" then
-        PlaySoundFile("Sound\Interface\iTellMessage.ogg","Master")
+        PlaySoundFile("Sound\\Interface\\iTellMessage.ogg","Master")
     end
     local sender=Plain(entry.leader) or "group leader"
     if UIErrorsFrame and type(UIErrorsFrame.AddMessage)=="function" then
