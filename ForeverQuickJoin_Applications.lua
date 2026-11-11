@@ -1,4 +1,4 @@
--- Forever QuickJoin v0.7.7: track every advertised activity in applications.
+-- Forever QuickJoin v0.8.0: track every advertised activity in applications.
 -- All queries/searches remain explicitly user initiated. No whispers are saved.
 local Apps = {}
 ForeverQuickJoinApplications = Apps
@@ -8,6 +8,7 @@ local entries, byRecord = {}, setmetatable({}, {__mode="k"})
 local selected, currentPage, nextSerial = nil, 1, 0
 local window, panel, listTitle, detailsTitle, detailsInfo, conversation, pageLabel
 local listRows, previousButton, nextButton, replyButton = {}, nil, nil, nil
+local notificationsCheck
 
 local function Readable(value)
     if type(canaccessvalue)=="function" and not canaccessvalue(value) then return nil end
@@ -60,6 +61,28 @@ local function CountUnread()
     for _,entry in ipairs(entries) do unread=unread+(entry.unread or 0) end
     return unread
 end
+local function NotificationsEnabled()
+    return not (type(ForeverQuickJoinDB)=="table"
+        and ForeverQuickJoinDB.replyNotifications==false)
+end
+local function NotifyReply(entry)
+    if not NotificationsEnabled() then return end
+    -- An open conversation already shows the message; don't double-notify.
+    if selected==entry and panel and panel:IsShown() then return end
+    if type(PlaySound)=="function" and type(SOUNDKIT)=="table" and SOUNDKIT.TELL_MESSAGE then
+        PlaySound(SOUNDKIT.TELL_MESSAGE,"Master")
+    elseif type(PlaySoundFile)=="function" then
+        PlaySoundFile("Sound\\Interface\\iTellMessage.ogg","Master")
+    end
+    local sender=Plain(entry.leader) or "group leader"
+    if UIErrorsFrame and type(UIErrorsFrame.AddMessage)=="function" then
+        UIErrorsFrame:AddMessage("QuickJoin: Reply from "..sender,.4,1,.65,1,3)
+    end
+    if DEFAULT_CHAT_FRAME and type(DEFAULT_CHAT_FRAME.AddMessage)=="function" then
+        DEFAULT_CHAT_FRAME:AddMessage("|cff69e3a2QuickJoin|r: Reply from "..Display(sender))
+    end
+end
+
 local function UpdateTab()
     if ForeverQuickJoinHost and ForeverQuickJoinHost.SetApplicationCount then
         ForeverQuickJoinHost.SetApplicationCount(#entries,CountUnread())
@@ -244,6 +267,7 @@ local function Receive(message,sender)
     else
         match.unread=match.unread+1
     end
+    NotifyReply(match)
     Refresh()
     UpdateFinderBadge()
 end
@@ -275,6 +299,15 @@ function Apps.Attach(parent)
         tile=true,tileSize=32,edgeSize=20,insets={left=0,right=0,top=0,bottom=0}})
     panel:SetBackdropColor(.035,.045,.065,1)
     Label(panel,"MY APPLICATIONS",17,10,460,28,"GameFontNormalLarge")
+    notificationsCheck=CreateFrame("CheckButton",nil,panel,"UICheckButtonTemplate")
+    notificationsCheck:SetSize(22,22)
+    notificationsCheck:SetPoint("TOPRIGHT",panel,"TOPRIGHT",-165,-17)
+    notificationsCheck:SetChecked(NotificationsEnabled())
+    Label(notificationsCheck,"Reply notifications",26,0,151,22,"GameFontHighlightSmall")
+    notificationsCheck:SetScript("OnClick",function(self)
+        ForeverQuickJoinDB=type(ForeverQuickJoinDB)=="table" and ForeverQuickJoinDB or {}
+        ForeverQuickJoinDB.replyNotifications=self:GetChecked()==true
+    end)
     Label(panel,"Whispers and replies from group leaders. Session-only; no automatic searches.",
         17,156,780,22)
     listTitle=Label(panel,"CONTACTED GROUPS (0)",16,193,770,23,"GameFontNormal")

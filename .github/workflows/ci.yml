@@ -1,0 +1,23 @@
+name: Validate ForeverQuickJoin
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lua:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lua 5.1
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y lua5.1
+      - name: Syntax check
+        run: luac5.1 -p ForeverQuickJoin.lua ForeverQuickJoin_Host.lua ForeverQuickJoin_Party.lua ForeverQuickJoin_Applications.lua ForeverQuickJoin_Theme.lua tests/*_smoke.lua
+      - name: Run smoke tests
+        run: |
+          for test in tests/*_smoke.lua; do lua5.1 "$test"; done
