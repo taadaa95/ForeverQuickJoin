@@ -23,6 +23,9 @@ assert(#filter("")==4 and #filter(nil)==4,"empty query restores all activities")
 assert(#filter("SCARLET")==2 and filter("scarlet")[1].id==1,"case-insensitive filtering")
 assert(#filter("  storm  ")==1 and filter("storm")[1].id==2,"trim query")
 assert(#filter("some unknown dungeon")==0,"nonmatching activity excluded")
+env.state.activities[5]={id=5,name="Forest",searchText="forest duskwood eastern kingdoms"}
+assert(#filter("duskwood")==1 and filter("duskwood")[1].id==5,
+    "available activity/zone aliases should be searchable")
 assert(scale(0.3)==0.7 and scale(5)==1.45,"resize limits")
 assert(scale("broken")==1 and scale(1.2)==1.2,"invalid/default and valid scale")
 assert(main:find("local choices=FilterActivities(state.activitySearchQuery)",1,true))
