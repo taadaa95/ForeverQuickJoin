@@ -32,6 +32,18 @@ The **Applications** tab shows the groups you've contacted through QuickJoin and
 
 Use **Open Blizzard Listing** in the List Group header to create and manage your listing in Blizzard's protected UI. QuickJoin automatically collects incoming whispers while loaded in a separate, session-only inbox, grouped by self-reported Tank, Healer, DPS, or Unknown role. Select an applicant to see their conversation and known class/level details. Reply, invite, decline, dismiss, or prepare a manual `/who` lookup.
 
+## Searchable activities
+
+Type in **Filter activities** beside the Activity menu to narrow the dropdown options by dungeon name. Open the Activity dropdown to select one of the matches, or press Enter to choose the first match. The filter runs locally on the available activities; it does **not** initiate a server search. Use **Show all level ranges** if the activity you want is outside your suggested level range.
+
+## Reply notifications
+
+In **Applications**, use **Reply notifications** to toggle sound and on-screen/chat alerts for replies from contacted leaders. Alerts are enabled by default, but not played when you are already viewing that conversation. The setting is saved per character.
+
+## Resize the window
+
+Drag the bottom-right corner grip to resize QuickJoin **proportionally** (70–145% scale); right-click the grip to reset it to 100%. The setting is saved per character. Proportional resizing keeps all tabs and the advanced filters aligned.
+
 ## Interface themes
 
 Select **Forever** or **Modern** using the **Theme** controls at the top of either QuickJoin tab.

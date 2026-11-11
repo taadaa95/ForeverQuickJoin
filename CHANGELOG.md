@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0 — 2026-11-10
+
+- Added a local-only **Filter activities** input beside the Activity dropdown. Typing narrows the menu options; pressing Enter selects the first match. No background or protected searches are triggered.
+- Added a per-character **Reply notifications** checkbox to Applications, enabled by default. Matching incoming group-leader replies play an optional sound and show on-screen/chat alerts, except when that conversation is already open.
+- Added proportional window resizing through a bottom-right grip (70–145% scale), persisted per character. Right-click the grip to reset to 100%; preserving the fixed layouts avoids clipping in Find Groups, List Group, and Applications.
+- Added regression tests for filtering, scale limits, notification preferences, and UI wiring. Original protected click-to-search behavior remains unchanged.
+
+
 ## 0.7.7 — 2026-11-10
 
 - Added complete support for group listings advertising multiple dungeon activities (WoW Forever allows several activities on one listing).

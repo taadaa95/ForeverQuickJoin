@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.7.7 -- multi-activity listing display, search matching and stable tracking.
+-- Forever QuickJoin 0.8.0 -- multi-activity listing display, search matching and stable tracking.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
@@ -28,6 +28,7 @@ local SENT_UNVERIFIED_TTL = 600 -- 10 minutes since last positive observation
 
 local db, window, categoryDropdown, activityDropdown, searchButton
 local sortDropdown, locationLabel, minimapButton, clearFilterButton, templateResetButton, allLevelsButton
+local activitySearchBox, activitySearchHint, activitySearchClear
 local advancedButton, advancedPanel, advancedMaxMembersDropdown
 local advancedClassButtons, advancedPlaystyleButtons, advancedCheckButtons = {}, {}, {}
 local filterButtons = {}
@@ -39,6 +40,7 @@ local state = {
     categoryName = nil,
     activityID = nil,
     activityName = nil,
+    activitySearchQuery = "",
     categories = {},
     activities = {},
     results = {},
@@ -1572,6 +1574,19 @@ end
 
 -- Readable, level-filtered activities are the single source of truth for
 -- both Search scope and which cached groups the selected category displays.
+-- The activity search is local-only: never invoke C_LFGList.Search while typing.
+local function FilterActivities(query)
+    local needle=type(query)=="string" and query:lower():gsub("^%s+",""):gsub("%s+$","") or ""
+    if needle=="" then return state.activities end
+    local matches={}
+    for _,item in ipairs(state.activities) do
+        if type(item.name)=="string" and item.name:lower():find(needle,1,true) then
+            matches[#matches+1]=item
+        end
+    end
+    return matches
+end
+
 local function SetAllowedActivities(activities)
     state.searchActivityIDs = {}
     state.categoryAllIDs = {}
@@ -1593,6 +1608,8 @@ end
 local function SetCategory(id, name)
     state.categoryID, state.categoryName = id, name
     state.activityID, state.activityName = nil, nil
+    state.activitySearchQuery = ""
+    if activitySearchBox then activitySearchBox:SetText("") end
     state.activities = GetActivities(id)
     SetAllowedActivities(state.activities)
     if categoryDropdown then categoryDropdown:OverrideText(name or "All categories") end
@@ -1602,6 +1619,16 @@ local function SetCategory(id, name)
     end
     UpdateSearchButton()
     if window then RefreshResults() end
+end
+
+local function SelectActivity(id,name)
+    state.activityID, state.activityName = id,name
+    if activityDropdown then activityDropdown:OverrideText(name or "All activities") end
+    -- Clearing the query after selection makes the next menu complete again.
+    state.activitySearchQuery=""
+    if activitySearchBox then activitySearchBox:SetText("") end
+    RefreshResults()
+    UpdatePreview()
 end
 
 local function RefreshCategories()
@@ -1738,10 +1765,17 @@ local function MakeLabel(parent, text, font, x, y, width, height)
 end
 
 local SyncDefaultForParty
+-- Proportional resizing preserves the existing fixed-position layouts in all tabs.
+local function ClampWindowScale(value)
+    if type(value)~="number" or value~=value then return 1 end
+    return math.max(0.70, math.min(1.45,value))
+end
+
 local function CreateWindow()
     if window then return window end
     window = CreateFrame("Frame", "ForeverQuickJoinWindow", UIParent, "BackdropTemplate")
     window:SetSize(840, 785)
+    window:SetScale(ClampWindowScale(db and db.windowScale or 1))
     window:SetPoint("CENTER")
     window:SetFrameStrata("DIALOG")
     window:SetClampedToScreen(true)
@@ -1760,6 +1794,54 @@ local function CreateWindow()
     -- DialogBox background has transparent pixels even at alpha 1. The solid
     -- white texture, tinted dark and fully opaque, closes every pixel.
     window:SetAlpha(1)
+    -- Resize from the bottom-right corner. Right-click restores 100% size.
+    local grip=CreateFrame("Button",nil,window)
+    grip:SetSize(18,18)
+    grip:SetPoint("BOTTOMRIGHT",window,"BOTTOMRIGHT",-2,2)
+    grip:SetFrameLevel(window:GetFrameLevel()+35)
+    grip:SetNormalTexture("Interface\ChatFrame\UI-ChatIM-SizeGrabber-Up")
+    grip:SetHighlightTexture("Interface\ChatFrame\UI-ChatIM-SizeGrabber-Highlight")
+    grip:SetPushedTexture("Interface\ChatFrame\UI-ChatIM-SizeGrabber-Down")
+    local resizeX,resizeY,resizeScale
+    local function StopResize()
+        if not resizeX then return end
+        grip:SetScript("OnUpdate",nil)
+        resizeX,resizeY,resizeScale=nil,nil,nil
+        if db then db.windowScale=ClampWindowScale(window:GetScale()) end
+    end
+    grip:SetScript("OnMouseDown",function(_,button)
+        if button=="RightButton" then
+            StopResize()
+            window:SetScale(1)
+            if db then db.windowScale=1 end
+            return
+        end
+        if button~="LeftButton" or type(GetCursorPosition)~="function" then return end
+        resizeX,resizeY=GetCursorPosition()
+        resizeScale=window:GetScale()
+        grip:SetScript("OnUpdate",function()
+            if not resizeX or not resizeScale then return end
+            local x,y=GetCursorPosition()
+            local parentScale=UIParent and UIParent.GetEffectiveScale
+                and UIParent:GetEffectiveScale() or 1
+            if type(parentScale)~="number" or parentScale<=0 then parentScale=1 end
+            local byWidth=resizeScale+(x-resizeX)/(840*parentScale)
+            local byHeight=resizeScale+(resizeY-y)/(785*parentScale)
+            local nextScale=math.abs(byWidth-resizeScale)>=math.abs(byHeight-resizeScale)
+                and byWidth or byHeight
+            window:SetScale(ClampWindowScale(nextScale))
+        end)
+    end)
+    grip:SetScript("OnMouseUp",StopResize)
+    grip:SetScript("OnHide",StopResize)
+    grip:SetScript("OnEnter",function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self,"ANCHOR_TOP")
+        GameTooltip:AddLine("Resize QuickJoin")
+        GameTooltip:AddLine("Drag to change size. Right-click to reset to 100%.",1,1,1,true)
+        GameTooltip:Show()
+    end)
+    grip:SetScript("OnLeave",function() if GameTooltip then GameTooltip:Hide() end end)
     MakeLabel(window, "Forever QuickJoin", "GameFontNormalLarge", 24, -17, 400, 26)
     local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", -7, -6)
@@ -1767,7 +1849,7 @@ local function CreateWindow()
     if UISpecialFrames then table.insert(UISpecialFrames, "ForeverQuickJoinWindow") end
 
     categoryDropdown = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
-    categoryDropdown:SetWidth(185)
+    categoryDropdown:SetWidth(170)
     categoryDropdown:SetPoint("TOPLEFT", window, "TOPLEFT", 22, -53)
     categoryDropdown:SetDefaultText("Category")
     categoryDropdown:SetupMenu(function(_, root)
@@ -1784,37 +1866,72 @@ local function CreateWindow()
     end)
 
     activityDropdown = CreateFrame("DropdownButton", nil, window, "WowStyle1DropdownTemplate")
-    activityDropdown:SetWidth(330)
+    activityDropdown:SetWidth(262)
     activityDropdown:SetPoint("LEFT", categoryDropdown, "RIGHT", 10, 0)
     activityDropdown:SetDefaultText("All activities")
     activityDropdown:SetupMenu(function(_, root)
         root:SetTag("MENU_FOREVER_QUICKJOIN_ACTIVITY")
         root:CreateRadio("All activities",
             function() return state.activityID == nil end,
-            function()
-                state.activityID, state.activityName = nil, nil
-                activityDropdown:OverrideText("All activities")
-                RefreshResults()
-                UpdatePreview()
-            end)
-        for _, item in ipairs(state.activities) do
+            function() SelectActivity(nil,nil) end)
+        local choices=FilterActivities(state.activitySearchQuery)
+        if #choices==0 then root:CreateTitle("No matching activities") end
+        for _, item in ipairs(choices) do
             local activityID, activityName = item.id, item.name
             root:CreateRadio(activityName,
                 function(id) return state.activityID == id end,
-                function(id)
-                    state.activityID, state.activityName = id, activityName
-                    activityDropdown:OverrideText(activityName)
-                    RefreshResults()
-                    UpdatePreview()
-                end, activityID)
+                function(id) SelectActivity(id,activityName) end, activityID)
         end
     end)
 
     searchButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-    searchButton:SetSize(106, 26)
+    searchButton:SetSize(95, 26)
     searchButton:SetPoint("LEFT", activityDropdown, "RIGHT", 10, 0)
     searchButton:SetText("Search")
     searchButton:SetScript("OnClick", SearchFromClick)
+    -- A search input beside the dropdown filters its choices without a server
+    -- request. Enter selects the first match; clicking Activity displays all matches.
+    activitySearchBox=CreateFrame("EditBox",nil,window,"InputBoxTemplate")
+    activitySearchBox:SetSize(195,24)
+    activitySearchBox:SetPoint("LEFT",searchButton,"RIGHT",14,0)
+    activitySearchBox:SetAutoFocus(false)
+    activitySearchBox:SetMaxLetters(60)
+    activitySearchHint=MakeLabel(activitySearchBox,"Filter activities...",
+        "GameFontDisableSmall",7,-2,180,22)
+    activitySearchBox:SetScript("OnTextChanged",function(self)
+        state.activitySearchQuery=(self:GetText() or ""):lower()
+        activitySearchHint:SetShown(state.activitySearchQuery=="")
+    end)
+    activitySearchBox:SetScript("OnEnterPressed",function(self)
+        local choices=FilterActivities(state.activitySearchQuery)
+        if #choices>0 then
+            SelectActivity(choices[1].id,choices[1].name)
+        else
+            Status("No matching activities. Try another term or show all level ranges.")
+        end
+        self:ClearFocus()
+    end)
+    activitySearchBox:SetScript("OnEscapePressed",function(self)
+        if state.activitySearchQuery~="" then self:SetText("") else self:ClearFocus() end
+    end)
+    activitySearchBox:SetScript("OnEnter",function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
+        GameTooltip:AddLine("Filter activities")
+        GameTooltip:AddLine("Type a dungeon name, then open the Activity menu or press Enter to select the first match.",1,1,1,true)
+        GameTooltip:Show()
+    end)
+    activitySearchBox:SetScript("OnLeave",function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    activitySearchClear=CreateFrame("Button",nil,window,"UIPanelButtonTemplate")
+    activitySearchClear:SetSize(22,22)
+    activitySearchClear:SetPoint("LEFT",activitySearchBox,"RIGHT",2,0)
+    activitySearchClear:SetText("X")
+    activitySearchClear:SetScript("OnClick",function()
+        activitySearchBox:SetText("")
+        activitySearchBox:SetFocus()
+    end)
     -- Level range is part of basic activity discovery, not an advanced
     -- result filter. Reuse the same saved setting and /qj all shortcut.
     allLevelsButton = CreateFrame("CheckButton", nil, window, "UICheckButtonTemplate")
@@ -2436,6 +2553,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
         db.filters.hideFull = nil -- Removed in v0.5.1.
         if db.sortOrder ~= "asc" and db.sortOrder ~= "desc" then db.sortOrder = "default" end
         if type(db.minimapAngle) ~= "number" then db.minimapAngle = 225 end
+        db.windowScale = ClampWindowScale(db.windowScale or 1)
         CreateMinimapButton()
     elseif event == "PLAYER_LOGIN" then
         CreateMinimapButton()
@@ -2450,7 +2568,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
                 end
             end)
         end
-        Print("v0.7.7 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        Print("v0.8.0 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
