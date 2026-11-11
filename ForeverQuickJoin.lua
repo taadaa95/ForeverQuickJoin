@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.8.0 -- multi-activity listing display, search matching and stable tracking.
+-- Forever QuickJoin 0.8.1 -- multi-activity listing display, search matching and stable tracking.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
@@ -1234,23 +1234,28 @@ local function MemberDetails(resultID, index)
 end
 
 local function SafeMarkup(text)
-    -- Player names and client-supplied group descriptions must not inject
-    -- WoW texture / hyperlink markup into FontStrings.
+    -- Ordinary untrusted text cannot inject WoW texture/hyperlink markup.
     return tostring(text or ""):gsub("|", "||"):gsub("[\r\n]", " ")
+end
+
+-- Group Finder comments can be opaque Kstrings (e.g. |Kt116|k).
+-- They are client-rendered placeholders: never escape, truncate or combine.
+-- Non-Kstring user text is still escaped to prevent UI markup injection.
+local function DescriptionForDisplay(value)
+    value=Readable(value)
+    if type(value)~="string" or value=="" then return nil end
+    if value:match("^|K[%w]+|k$") then return value end
+    return SafeMarkup(value)
 end
 
 local function PopulateMemberDetails(row, resultID, info)
     local n = Readable(info and info.numMembers)
     if type(n) ~= "number" or n < 1 then n = 0 end
     n = math.min(40, math.floor(n))
-    local comment = Readable(info and info.comment)
-    local showComment = type(comment) == "string" and comment ~= ""
+    local comment=DescriptionForDisplay(info and info.comment)
+    local showComment=comment~=nil
     local activityNames=ResultActivityNames(info)
     local multiple=#activityNames>1
-    local introHeight=(showComment and 53 or 34)+(multiple and 19 or 0)
-    local lines = math.ceil(n / 2)
-    local height = introHeight + math.max(1, lines) * 45 + 8
-    row.detail:SetHeight(height)
     row.detailsTitle:SetText(("GROUP MEMBERS (%d)  ·  Right-click a named player to look up their area (/who)"):format(n))
     row.detailsActivities:SetShown(multiple)
     if multiple then
@@ -1259,21 +1264,35 @@ local function PopulateMemberDetails(row, resultID, info)
     else
         row.detailsActivities:SetText("")
     end
+    row.detailsDescriptionTitle:ClearAllPoints()
+    row.detailsDescriptionTitle:SetPoint("TOPLEFT",row.detail,"TOPLEFT",8,
+        multiple and -46 or -27)
+    row.detailsDescriptionTitle:SetShown(showComment)
     row.detailsComment:ClearAllPoints()
     row.detailsComment:SetPoint("TOPLEFT",row.detail,"TOPLEFT",8,
-        multiple and -46 or -27)
-    row.detailHint:ClearAllPoints()
-    row.detailHint:SetPoint("TOPLEFT",row.detail,"TOPLEFT",8,
-        multiple and -59 or -40)
+        multiple and -65 or -46)
+    local commentHeight=0
     if showComment then
-        row.detailsComment:SetText("Notes: " .. SafeMarkup(Truncate(comment, 114)))
+        -- Ask WoW to render the original Kstring and measure its actual
+        -- displayed height; do not inspect or manipulate the hidden text.
+        row.detailsComment:SetHeight(4096)
+        row.detailsComment:SetText(comment)
+        commentHeight=math.max(19,math.ceil(row.detailsComment:GetStringHeight() or 19))
+        row.detailsComment:SetHeight(commentHeight)
         row.detailsComment:Show()
     else
         row.detailsComment:SetText("")
         row.detailsComment:Hide()
     end
-    row.detailHint:SetShown(n == 0)
-    if n == 0 then row.detailHint:SetText("Member information is not available for this listing.") end
+    local introHeight=34+(multiple and 19 or 0)
+        +(showComment and (19+commentHeight) or 0)
+    local lines=math.ceil(n/2)
+    local height=introHeight+math.max(1,lines)*45+8
+    row.detail:SetHeight(height)
+    row.detailHint:ClearAllPoints()
+    row.detailHint:SetPoint("TOPLEFT",row.detail,"TOPLEFT",8,-(introHeight+4))
+    row.detailHint:SetShown(n==0)
+    if n==0 then row.detailHint:SetText("Member information is not available for this listing.") end
     for index = 1, math.max(n, #row.memberTiles) do
         local tile = row.memberTiles[index]
         if index <= n then
@@ -1384,8 +1403,13 @@ UpdatePages = function()
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", resultsCanvas, "TOPLEFT", 0, -offset)
         row:SetHeight(34)
+        row.expand:SetHeight(34)
         row.detail:Hide()
         row.expandLabel:SetText("+")
+        row.descriptionDisplay=nil
+        row.descriptionPreview:SetText("")
+        row.descriptionPreview:Hide()
+        row.noteIcon:Hide()
         if not resultID then
             row:Hide()
         else
@@ -1412,7 +1436,23 @@ UpdatePages = function()
                 row.label:SetText(Truncate(displayName, 21))
                 row.related:SetText(RelatedLabel(info))
                 row.socialCounts=RelatedCounts(info)
-                row.activity:SetText(SafeMarkup(Truncate(activity,33)))
+                row.activity:SetText(SafeMarkup(Truncate(activity,29)))
+                -- Avoid displaying cached Kstring tokens from unverifiable rows.
+                local description=verified and DescriptionForDisplay(info.comment) or nil
+                row.descriptionDisplay=description
+                row.noteIcon:SetShown(description~=nil)
+                local headerHeight=34
+                if description then
+                    headerHeight=54
+                    -- Clip visually at a fixed one-line FontString boundary;
+                    -- never truncate or search an opaque Group Finder comment.
+                    row.descriptionPreview:SetText(description)
+                    row.descriptionPreview:Show()
+                end
+                row:SetHeight(headerHeight)
+                row.expand:SetHeight(headerHeight)
+                row.detail:ClearAllPoints()
+                row.detail:SetPoint("TOPLEFT",row,"TOPLEFT",0,-headerHeight)
                 local rec=(not verified and state.sentVirtualIDs[resultID]) or
                     MatchSent(resultID,info)
                 local replyStatus=rec and ForeverQuickJoinApplications and
@@ -1434,7 +1474,7 @@ UpdatePages = function()
                 row.expand:SetEnabled(verified and removed ~= true)
                 if verified and state.expandedResultID == resultID and removed ~= true then
                     row.expandLabel:SetText("-")
-                    row:SetHeight(34 + PopulateMemberDetails(row, resultID, info))
+                    row:SetHeight(headerHeight + PopulateMemberDetails(row, resultID, info))
                 end
             end
             offset = offset + row:GetHeight() + 1
@@ -1564,7 +1604,17 @@ local function GetActivities(categoryID)
             -- Only show suggested-level activities initially, like Blizzard.
             -- An option below allows users to see every available activity.
             if (db and db.allLevels) or ((low == 0 or level >= low) and (high == 0 or level <= high)) then
-                table.insert(arr, { id = id, name = ActivityDisplayName(id) or ("Activity " .. id) })
+                local display=ActivityDisplayName(id) or ("Activity "..id)
+                local aliases={display}
+                -- Use Blizzard-provided activity/zone aliases; never search
+                -- group descriptions, which may be opaque protected Kstrings.
+                for _,field in ipairs({"fullName","shortName","name","zoneName"}) do
+                    local alias=Readable(info[field])
+                    if type(alias)=="string" and alias~="" then
+                        aliases[#aliases+1]=alias
+                    end
+                end
+                table.insert(arr,{id=id,name=display,searchText=table.concat(aliases," "):lower()})
             end
         end
     end
@@ -1580,7 +1630,8 @@ local function FilterActivities(query)
     if needle=="" then return state.activities end
     local matches={}
     for _,item in ipairs(state.activities) do
-        if type(item.name)=="string" and item.name:lower():find(needle,1,true) then
+        local text=item.searchText or item.name
+        if type(text)=="string" and text:lower():find(needle,1,true) then
             matches[#matches+1]=item
         end
     end
@@ -1871,7 +1922,7 @@ local function BuildSearchControls(window)
     activitySearchBox:SetPoint("LEFT",searchButton,"RIGHT",14,0)
     activitySearchBox:SetAutoFocus(false)
     activitySearchBox:SetMaxLetters(60)
-    activitySearchHint=MakeLabel(activitySearchBox,"Filter activities...",
+    activitySearchHint=MakeLabel(activitySearchBox,"Activities / zones...",
         "GameFontDisableSmall",7,-2,180,22)
     activitySearchBox:SetScript("OnTextChanged",function(self)
         state.activitySearchQuery=(self:GetText() or ""):lower()
@@ -1892,8 +1943,8 @@ local function BuildSearchControls(window)
     activitySearchBox:SetScript("OnEnter",function(self)
         if not GameTooltip then return end
         GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
-        GameTooltip:AddLine("Filter activities")
-        GameTooltip:AddLine("Type a dungeon name, then open the Activity menu or press Enter to select the first match.",1,1,1,true)
+        GameTooltip:AddLine("Filter activities and zones")
+        GameTooltip:AddLine("Type an activity or zone name, then open the Activity menu or press Enter to select the first match. Group descriptions cannot be searched.",1,1,1,true)
         GameTooltip:Show()
     end)
     activitySearchBox:SetScript("OnLeave",function()
@@ -2193,6 +2244,10 @@ local function CreateWindow()
                         GameTooltip:AddLine("  "..SafeMarkup(activityName),.85,.9,1)
                     end
                 end
+                if row.descriptionDisplay then
+                    GameTooltip:AddLine("Group Description",1,.82,0)
+                    GameTooltip:AddLine(row.descriptionDisplay,1,1,1,true)
+                end
                 local info=ResultInfo(row.resultID)
                 local age=type(info)=="table" and AgeLabel(Readable(info.age))
                 if age then GameTooltip:AddLine("Listing age: approximately "..age,.82,.82,.85) end
@@ -2210,11 +2265,20 @@ local function CreateWindow()
         -- F = character friends, B = Battle.net friends, G = guildmates.
         -- Keep Sent/Reply immediately left of Whisper, NOT below the leader.
         row.sentBadge = MakeLabel(row, "", "GameFontNormalSmall", 599, -8, 40, 22)
-        row.activity = MakeLabel(row, "", "GameFontHighlightSmall", 187, -2, 225, 16)
+        row.noteIcon=row:CreateTexture(nil,"ARTWORK")
+        row.noteIcon:SetTexture("Interface\\Icons\\INV_Misc_Note_01")
+        row.noteIcon:SetSize(14,14)
+        row.noteIcon:SetPoint("TOPLEFT",row,"TOPLEFT",188,-3)
+        row.noteIcon:Hide()
+        row.activity = MakeLabel(row, "", "GameFontHighlightSmall", 207, -2, 205, 16)
         row.playstyle = MakeLabel(row, "", "GameFontHighlightSmall", 187, -18, 225, 14)
         row.playstyle:SetTextColor(0.72, 0.88, 0.72)
         row.playstyle:SetWordWrap(false)
         row.composition = MakeLabel(row, "", "GameFontHighlightSmall", 416, -8, 181, 22)
+        row.descriptionPreview=MakeLabel(row,"","GameFontHighlightSmall",26,-35,705,16)
+        row.descriptionPreview:SetTextColor(.72,.78,.85)
+        row.descriptionPreview:SetWordWrap(false)
+        row.descriptionPreview:Hide()
         row.detail = CreateFrame("Frame", nil, row, "BackdropTemplate")
         row.detail:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -34)
         row.detail:SetSize(759, 90)
@@ -2224,8 +2288,13 @@ local function CreateWindow()
         row.detailsActivities = MakeLabel(row.detail, "", "GameFontHighlightSmall", 8, -27, 735, 18)
         row.detailsActivities:SetTextColor(.74,.87,1)
         row.detailsActivities:Hide()
-        row.detailsComment = MakeLabel(row.detail, "", "GameFontHighlightSmall", 8, -27, 735, 19)
+        row.detailsDescriptionTitle=MakeLabel(row.detail,"Group Description",
+            "GameFontNormalSmall",8,-27,735,18)
+        row.detailsDescriptionTitle:Hide()
+        row.detailsComment = MakeLabel(row.detail, "", "GameFontHighlightSmall", 8, -46, 735, 19)
         row.detailsComment:SetTextColor(.82, .82, .84)
+        row.detailsComment:SetJustifyV("TOP")
+        row.detailsComment:SetWordWrap(true)
         row.detailHint = MakeLabel(row.detail, "", "GameFontHighlightSmall", 8, -40, 730, 18)
         row.memberTiles = {}
         row.detail:Hide()
@@ -2576,7 +2645,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
                 end
             end)
         end
-        Print("v0.8.0 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        Print("v0.8.1 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
