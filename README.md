@@ -24,6 +24,12 @@
 <img width="612" height="1131" alt="screenshot-2026-11-09_18-27-57" src="https://github.com/user-attachments/assets/9cf5f338-363a-427e-8687-b717ba239432" />
 
 
+### Group descriptions and Quests & Zones
+
+QuickJoin now displays group descriptions as a one-line preview beneath results, the complete wrapped description when expanding a listing, and full text in the mouseover tooltip. A note icon indicates that a listing has a description. WoW's protected Kstring tokens are passed directly to its UI renderer, rather than being escaped or truncated.
+
+The activity dropdown search supports activity and zone names, including alternate names exposed by the client. It filters locally and never initiates a background Group Finder search. **Descriptions containing specific quest or elite-mob names cannot reliably be searched by addons** because WoW masks their contents.
+
 ### My Applications & reply tracking
 
 The **Applications** tab shows the groups you've contacted through QuickJoin and your outgoing messages. Replies from a matching leader are attached to that conversation, and an unread counter appears on the Applications tab. Open a conversation to mark its replies read, or click **Reply to leader** to prepare a whisper in Blizzard chat (press Enter yourself to send). Follow-up whispers to the same active listing stay in the same thread.
@@ -34,7 +40,7 @@ Use **Open Blizzard Listing** in the List Group header to create and manage your
 
 ## Searchable activities
 
-Type in **Filter activities** beside the Activity menu to narrow the dropdown options by dungeon name. Open the Activity dropdown to select one of the matches, or press Enter to choose the first match. The filter runs locally on the available activities; it does **not** initiate a server search. Use **Show all level ranges** if the activity you want is outside your suggested level range.
+Type in **Activities / zones** beside the Activity menu to narrow dropdown options by activity or zone name. Open the Activity dropdown to select one of the matches, or press Enter to choose the first match. The filter runs locally on the available activities; it does **not** initiate a server search. Use **Show all level ranges** if the activity you want is outside your suggested level range.
 
 ## Reply notifications
 

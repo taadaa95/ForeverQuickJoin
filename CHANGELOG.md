@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.1 — 2026-11-10
+
+- Fixed protected Group Finder descriptions rendering as raw Kstring tokens. Native protected tokens are passed to WoW's renderer unchanged, while ordinary untrusted text is still escaped.
+- Added complete group descriptions in a wrapped tooltip and expanded group details, with layout height measured from rendered text rather than truncated.
+- Added a note icon and a one-line, visually clipped description preview in listings.
+- Improved the local activity/zone keyword search with alternate names from Blizzard's activity metadata.
+- Added Lua 5.1 regression tests for protected and ordinary description text and UI wiring. No background restricted search actions were added.
+
+
 ## 0.8.0 — 2026-11-10
 
 - Added a local-only **Filter activities** input beside the Activity dropdown. Typing narrows the menu options; pressing Enter selects the first match. No background or protected searches are triggered.
