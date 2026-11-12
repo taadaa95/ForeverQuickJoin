@@ -4,6 +4,11 @@
 
 ## Features
 
+### Tab visibility and transparency
+
+**Find Groups**, **List Group**, and **Applications** are separate views. With transparency enabled in either theme, only the active tab's controls remain visible; hidden Find Groups content will not bleed through the translucent List Group or Applications background. The party composition summary remains available in Find Groups and List Group, but is hidden on Applications.
+
+
 ### Find Groups
 
 - Search Blizzard's Group Finder directly by category and activity.

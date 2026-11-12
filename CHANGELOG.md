@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.2 — 2026-11-11
+
+- Fixed Find Groups controls, result rows, whisper editor and filter labels showing through the List Group / Applications tabs when theme transparency is enabled.
+- All finder-only UI is now grouped in its own independently hidden content frame; the persistent header and navigation remain visible in every tab.
+- The shared party summary remains visible in Find Groups and List Group but no longer overlays Applications.
+- Both Forever and Modern theme transparency continue to show the world behind the active tab without leaking hidden tab content.
+- Added a tab isolation regression test and kept Blizzard-protected searches on explicit button clicks only.
+
+
 ## 0.8.1 — 2026-11-10
 
 - Fixed protected Group Finder descriptions rendering as raw Kstring tokens. Native protected tokens are passed to WoW's renderer unchanged, while ordinary untrusted text is still escaped.

@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.8.1 -- multi-activity listing display, search matching and stable tracking.
+-- Forever QuickJoin 0.8.2 -- multi-activity listing display, search matching and stable tracking.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
@@ -26,7 +26,7 @@ local WHO_ZONE_TTL = 300
 -- A cached result ID is never proof that the listing is still available.
 local SENT_UNVERIFIED_TTL = 600 -- 10 minutes since last positive observation
 
-local db, window, categoryDropdown, activityDropdown, searchButton
+local db, window, findContent, categoryDropdown, activityDropdown, searchButton
 local sortDropdown, locationLabel, minimapButton, clearFilterButton, templateResetButton, allLevelsButton
 local activitySearchBox, activitySearchHint, activitySearchClear
 local advancedButton, advancedPanel, advancedMaxMembersDropdown
@@ -2002,13 +2002,23 @@ local function CreateWindow()
     close:SetScript("OnClick", function() window:Hide() end)
     if UISpecialFrames then table.insert(UISpecialFrames, "ForeverQuickJoinWindow") end
 
-    BuildSearchControls(window)
-    advancedButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+    -- Finder content has its own parent, separate from the persistent header
+    -- and tab navigation. Hiding it removes *all* Finder text/controls,
+    -- regardless of overlay opacity or theme background transparency.
+    findContent=CreateFrame("Frame","ForeverQuickJoinFindContent",window)
+    findContent:SetAllPoints(window)
+    findContent:SetFrameLevel(window:GetFrameLevel()+1)
+    window.QuickJoinSetFinderVisible=function(visible)
+        if visible then findContent:Show() else findContent:Hide() end
+    end
+
+    BuildSearchControls(findContent)
+    advancedButton = CreateFrame("Button", nil, findContent, "UIPanelButtonTemplate")
     advancedButton:SetSize(168, 26)
     advancedButton:SetPoint("TOPLEFT", window, "TOPLEFT", 641, -89)
     advancedButton:SetText("Advanced Filters >>")
 
-    advancedPanel = CreateFrame("Frame", "ForeverQuickJoinAdvancedFilters", window, "BackdropTemplate")
+    advancedPanel = CreateFrame("Frame", "ForeverQuickJoinAdvancedFilters", findContent, "BackdropTemplate")
     advancedPanel:SetSize(365, 676)
     advancedPanel:SetFrameStrata("DIALOG")
     advancedPanel:SetFrameLevel(window:GetFrameLevel() + 15)
@@ -2182,15 +2192,15 @@ local function CreateWindow()
     UpdateFilterButtons()
     if db and db.advancedOpen then ToggleAdvanced(true) end
 
-    MakeLabel(window, "GROUP LISTINGS", "GameFontNormal", 26, -198, 570, 20)
-    MakeLabel(window, "LEADER", "GameFontNormalSmall", 36, -214, 160, 16)
-    MakeLabel(window, "ACTIVITY / PLAYSTYLE", "GameFontNormalSmall", 211, -214, 222, 16)
-    MakeLabel(window, "GROUP ROLES", "GameFontNormalSmall", 442, -214, 210, 16)
-    MakeLabel(window, "Click a row to view members", "GameFontHighlightSmall", 648, -198, 160, 17)
+    MakeLabel(findContent, "GROUP LISTINGS", "GameFontNormal", 26, -198, 570, 20)
+    MakeLabel(findContent, "LEADER", "GameFontNormalSmall", 36, -214, 160, 16)
+    MakeLabel(findContent, "ACTIVITY / PLAYSTYLE", "GameFontNormalSmall", 211, -214, 222, 16)
+    MakeLabel(findContent, "GROUP ROLES", "GameFontNormalSmall", 442, -214, 210, 16)
+    MakeLabel(findContent, "Click a row to view members", "GameFontHighlightSmall", 648, -198, 160, 17)
 
     -- The list scrolls vertically when an expanded group contains many members.
     -- A fixed viewport prevents the detail panel from overlapping the whisper UI.
-    resultsViewport = CreateFrame("ScrollFrame", nil, window, "UIPanelScrollFrameTemplate")
+    resultsViewport = CreateFrame("ScrollFrame", nil, findContent, "UIPanelScrollFrameTemplate")
     resultsViewport:SetPoint("TOPLEFT", window, "TOPLEFT", 24, -234)
     resultsViewport:SetSize(764, 315)
     resultsCanvas = CreateFrame("Frame", nil, resultsViewport)
@@ -2309,7 +2319,7 @@ local function CreateWindow()
         rows[i] = row
     end
 
-    prevButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+    prevButton = CreateFrame("Button", nil, findContent, "UIPanelButtonTemplate")
     prevButton:SetSize(90, 24)
     prevButton:SetPoint("TOPLEFT", window, "TOPLEFT", 25, -562)
     prevButton:SetText("Previous")
@@ -2318,7 +2328,7 @@ local function CreateWindow()
         if resultsViewport then resultsViewport:SetVerticalScroll(0) end
         UpdatePages()
     end)
-    nextButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+    nextButton = CreateFrame("Button", nil, findContent, "UIPanelButtonTemplate")
     nextButton:SetSize(90, 24)
     nextButton:SetPoint("TOPRIGHT", window, "TOPRIGHT", -25, -562)
     nextButton:SetText("Next")
@@ -2327,12 +2337,12 @@ local function CreateWindow()
         if resultsViewport then resultsViewport:SetVerticalScroll(0) end
         UpdatePages()
     end)
-    pageLabel = MakeLabel(window, "Page 1 / 1", "GameFontHighlightSmall", 277, -567, 300, 20)
+    pageLabel = MakeLabel(findContent, "Page 1 / 1", "GameFontHighlightSmall", 277, -567, 300, 20)
     pageLabel:SetJustifyH("CENTER")
 
-    MakeLabel(window, "Whisper: {level} {class} {role} {activity} {location} {party} {partycount}",
+    MakeLabel(findContent, "Whisper: {level} {class} {role} {activity} {location} {party} {partycount}",
         "GameFontNormalSmall", 26, -602, 600, 18)
-    templateResetButton = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+    templateResetButton = CreateFrame("Button", nil, findContent, "UIPanelButtonTemplate")
     templateResetButton:SetSize(178, 23)
     templateResetButton:SetPoint("TOPRIGHT", window, "TOPRIGHT", -26, -598)
     templateResetButton:SetText("Reload Whisper Template")
@@ -2350,7 +2360,7 @@ local function CreateWindow()
         UpdatePreview()
         Status(GroupSize() > 0 and "Loaded group-aware default template." or "Loaded solo default template.")
     end)
-    messageBox = CreateFrame("EditBox", nil, window, "InputBoxTemplate")
+    messageBox = CreateFrame("EditBox", nil, findContent, "InputBoxTemplate")
     messageBox:SetSize(758,23)
     messageBox:SetPoint("TOPLEFT", window, "TOPLEFT", 36, -626)
     messageBox:SetAutoFocus(false)
@@ -2365,12 +2375,12 @@ local function CreateWindow()
         end
         UpdatePreview()
     end)
-    previewTitleLabel = MakeLabel(window, "Preview:", "GameFontNormalSmall", 26, -657, 70, 56)
+    previewTitleLabel = MakeLabel(findContent, "Preview:", "GameFontNormalSmall", 26, -657, 70, 56)
     previewTitleLabel:SetJustifyV("TOP")
-    previewLabel = MakeLabel(window, "", "GameFontHighlightSmall", 100, -657, 700, 56)
+    previewLabel = MakeLabel(findContent, "", "GameFontHighlightSmall", 100, -657, 700, 56)
     previewLabel:SetJustifyV("TOP")
-    locationLabel = MakeLabel(window, "", "GameFontNormalSmall", 26, -717, 785, 20)
-    statusLabel = MakeLabel(window, "Waiting for activities...", "GameFontHighlightSmall", 26, -741, 785, 20)
+    locationLabel = MakeLabel(findContent, "", "GameFontNormalSmall", 26, -717, 785, 20)
+    statusLabel = MakeLabel(findContent, "Waiting for activities...", "GameFontHighlightSmall", 26, -741, 785, 20)
 
     window:EnableMouseWheel(true)
     window:SetScript("OnMouseWheel", function(_, delta)
@@ -2645,7 +2655,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
                 end
             end)
         end
-        Print("v0.8.1 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        Print("v0.8.2 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
