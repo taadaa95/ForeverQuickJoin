@@ -20,7 +20,7 @@ assert binding.attrib.get("default") == "CTRL-I", "Ctrl+I must be the native def
 assert (binding.text or "").strip() == "ForeverQuickJoin_ToggleWindow()"
 # Default is declarative only; never force-remap or save user keys from Lua.
 source = (ROOT / "ForeverQuickJoin.lua").read_text()
-assert not re.search(r"\\b(?:SetBinding|SetOverrideBinding|SaveBindings)\\s*\\(", source), (
+assert not re.search(r"\b(?:SetBinding|SetOverrideBinding|SaveBindings)\s*\(", source), (
     "Never overwrite user-managed binding sets programmatically"
 )
 
