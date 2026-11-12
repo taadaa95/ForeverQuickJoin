@@ -15,11 +15,19 @@ actions = [node for node in root if node.tag == "Binding"]
 assert len(actions) == 1, "Expect one player-configurable toggle action"
 binding = actions[0]
 assert binding.attrib["name"] == "FOREVERQUICKJOIN_TOGGLE"
-assert binding.attrib["header"] == "FOREVERQUICKJOIN"
+assert "header" not in binding.attrib, (
+    "Forever's keybinding UI incorrectly shows a separate HEADER_ action"
+)
+assert "category" not in binding.attrib, (
+    "Leave this lone binding under the client's built-in Other category"
+)
 assert binding.attrib.get("default") == "CTRL-I", "Ctrl+I must be the native default key"
 assert (binding.text or "").strip() == "ForeverQuickJoin_ToggleWindow()"
 # Default is declarative only; never force-remap or save user keys from Lua.
 source = (ROOT / "ForeverQuickJoin.lua").read_text()
+assert "BINDING_HEADER_FOREVERQUICKJOIN" not in source, (
+    "No legacy header label is needed without the header attribute"
+)
 assert not re.search(r"\b(?:SetBinding|SetOverrideBinding|SaveBindings)\s*\(", source), (
     "Never overwrite user-managed binding sets programmatically"
 )

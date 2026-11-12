@@ -5,9 +5,8 @@
 -- A client may still block the action; retain cached-results fallback.
 local addonName = ...
 
--- Binding names appear in Blizzard's Keybindings UI. The player controls
--- whether WoW saves bindings for this character or across characters.
-BINDING_HEADER_FOREVERQUICKJOIN = "Forever QuickJoin"
+-- The binding appears under WoW's Other category without an extra header
+-- action. WoW manages account-wide and character-specific key assignments.
 BINDING_NAME_FOREVERQUICKJOIN_TOGGLE = "Toggle Forever QuickJoin"
 local PREFIX = "|cff62c8efQuickJoin|r: "
 local PREVIOUS_DEFAULT_MESSAGE = "Level {level} {class} {role} LFG {activity}, can summon. Inv pls!"
