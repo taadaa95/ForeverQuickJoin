@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.6 — 2026-11-12
+
+- Fixed the minimap keybinding tooltip showing WoW's abbreviated **c+I** instead of **Ctrl + I**.
+- Modifier names are now expanded (Ctrl, Shift, Alt) from the raw current binding, with readable spacing and localized non-modifier keys where available.
+- Supports combined modifiers, mouse bindings, secondary keybindings, and changes made in WoW's Keybindings settings without reload.
+- The existing default Ctrl+I binding and all user-assigned shortcuts remain untouched.
+
+
 ## 0.8.5 — 2026-11-12
 
 - Minimap tooltip now displays the player's **current** Toggle Forever QuickJoin keybinding, rather than assuming the default Ctrl+I.
