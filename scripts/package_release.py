@@ -5,11 +5,13 @@ from __future__ import annotations
 import os
 import re
 import zipfile
+from xml.etree import ElementTree
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parent.parent
 ADDON = "ForeverQuickJoin"
 TOC_NAME = f"{ADDON}.toc"
+BINDINGS_NAME = "Bindings.xml"  # WoW auto-loads it; never put this in the TOC.
 
 
 def build() -> tuple[Path, Path, str]:
@@ -41,6 +43,19 @@ def build() -> tuple[Path, Path, str]:
 
     if len(entries) < 2:
         raise SystemExit("No add-on source files listed in TOC")
+
+    # WoW loads Bindings.xml automatically when it is at the addon's root.
+    # Including it as a TOC entry is invalid, but omitting it from the release
+    # ZIP would make an otherwise correct keybinding invisible to players.
+    if BINDINGS_NAME in entries:
+        raise SystemExit("Bindings.xml must not be listed in the TOC")
+    bindings = ROOT / BINDINGS_NAME
+    if not bindings.is_file():
+        raise SystemExit("Missing Bindings.xml (required for the native keybinding)")
+    parsed = ElementTree.parse(bindings)
+    if parsed.getroot().tag != "Bindings":
+        raise SystemExit("Bindings.xml must have a <Bindings> root")
+    entries.append(BINDINGS_NAME)
 
     output = ROOT / "dist"
     output.mkdir(exist_ok=True)

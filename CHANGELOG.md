@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.3 — 2026-11-12
+
+- Added a **Toggle Forever QuickJoin** action to WoW's native Keybindings menu. WoW handles the chosen shortcut and character-specific/account bindings; no default key is forced.
+- Added suggested dungeon level ranges (from the Forever client's activity metadata) to the activity dropdown, selected dungeon, group-result secondary labels, and per-activity mouseover tooltips. Non-dungeon categories are unchanged and missing level data is never invented.
+- Updated GitHub release ZIP packaging to include the automatically loaded root `Bindings.xml` without incorrectly listing it in the TOC.
+- Added Lua 5.1 regression tests for dungeon range formatting, category boundaries, multi-activity selection, binding wiring, and packaging checks.
+
+
 ## 0.8.2 — 2026-11-11
 
 - Fixed Find Groups controls, result rows, whisper editor and filter labels showing through the List Group / Applications tabs when theme transparency is enabled.

@@ -1,0 +1,5 @@
+<Bindings>
+  <Binding name="FOREVERQUICKJOIN_TOGGLE" header="FOREVERQUICKJOIN">
+    ForeverQuickJoin_ToggleWindow()
+  </Binding>
+</Bindings>

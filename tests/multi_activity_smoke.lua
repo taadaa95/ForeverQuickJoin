@@ -164,8 +164,9 @@ assert(env.retired==nil,"unrelated listing must not trigger false lifecycle tran
 -- Source checks for the visual and app integration paths that require WoW frames.
 assert(source:find("row.detailsActivities:SetShown(multiple)",1,true),
     "expanded row must reveal all activities")
-assert(source:find("GameTooltip:AddLine(\"  \"..SafeMarkup(activityName)",1,true),
-    "hover tooltip must list every activity")
+assert(source:find("for _,activityName in ipairs(activities) do",1,true)
+    and source:find('GameTooltip:AddLine("  "..SafeMarkup(display)',1,true),
+    "hover tooltip must list every activity (with suggested levels where available)")
 assert(source:find("row.activityNames=ResultActivityNames(info)",1,true),
     "finder row must track all advertised activities")
 print("Multi-activity listing tests passed.")
