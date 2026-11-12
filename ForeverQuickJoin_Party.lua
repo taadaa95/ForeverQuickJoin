@@ -280,6 +280,12 @@ function Party.Refresh(prune)
     Snapshot(prune==true)
     RefreshView()
 end
+-- The party summary is intentionally shared by Find and List, but must not
+-- cover the Applications view when transparent backgrounds are enabled.
+function Party.SetSummaryVisible(visible)
+    if not summary then return end
+    if visible then summary:Show() else summary:Hide() end
+end
 function Party.Attach(window)
     if summary then return end
     attachedWindow=window

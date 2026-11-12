@@ -547,6 +547,10 @@ function Host.OpenList()
     window:Show()
     if window.QuickJoinHideAdvanced then window.QuickJoinHideAdvanced() end
     if ForeverQuickJoinApplications then ForeverQuickJoinApplications.Hide() end
+    if window.QuickJoinSetFinderVisible then window.QuickJoinSetFinderVisible(false) end
+    if ForeverQuickJoinParty and ForeverQuickJoinParty.SetSummaryVisible then
+        ForeverQuickJoinParty.SetSummaryVisible(true)
+    end
     panel:Show()
     findTab:Enable();hostTab:Disable();applicationsTab:Enable()
     UpdateListingUI()
@@ -557,6 +561,10 @@ function Host.OpenFind()
     window:Show()
     panel:Hide()
     if ForeverQuickJoinApplications then ForeverQuickJoinApplications.Hide() end
+    if window.QuickJoinSetFinderVisible then window.QuickJoinSetFinderVisible(true) end
+    if ForeverQuickJoinParty and ForeverQuickJoinParty.SetSummaryVisible then
+        ForeverQuickJoinParty.SetSummaryVisible(true)
+    end
     findTab:Disable();hostTab:Enable();applicationsTab:Enable()
 end
 function Host.OpenApplications()
@@ -564,6 +572,10 @@ function Host.OpenApplications()
     window:Show()
     if window.QuickJoinHideAdvanced then window.QuickJoinHideAdvanced() end
     panel:Hide()
+    if window.QuickJoinSetFinderVisible then window.QuickJoinSetFinderVisible(false) end
+    if ForeverQuickJoinParty and ForeverQuickJoinParty.SetSummaryVisible then
+        ForeverQuickJoinParty.SetSummaryVisible(false)
+    end
     if ForeverQuickJoinApplications then ForeverQuickJoinApplications.Open() end
     findTab:Enable();hostTab:Enable();applicationsTab:Disable()
 end
