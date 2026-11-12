@@ -21,3 +21,5 @@ jobs:
       - name: Run smoke tests
         run: |
           for test in tests/*_smoke.lua; do lua5.1 "$test"; done
+      - name: Validate native bindings and release packaging
+        run: python3 tests/bindings_package_smoke.py

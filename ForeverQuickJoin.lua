@@ -1,9 +1,14 @@
--- Forever QuickJoin 0.8.2 -- multi-activity listing display, search matching and stable tracking.
+-- Forever QuickJoin 0.8.3 -- multi-activity listing display, search matching and stable tracking.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
 -- A client may still block the action; retain cached-results fallback.
 local addonName = ...
+
+-- Binding names appear in Blizzard's Keybindings UI. The player controls
+-- whether WoW saves bindings for this character or across characters.
+BINDING_HEADER_FOREVERQUICKJOIN = "Forever QuickJoin"
+BINDING_NAME_FOREVERQUICKJOIN_TOGGLE = "Toggle Forever QuickJoin"
 local PREFIX = "|cff62c8efQuickJoin|r: "
 local PREVIOUS_DEFAULT_MESSAGE = "Level {level} {class} {role} LFG {activity}, can summon. Inv pls!"
 -- The canonical SOLO default is intentionally exactly this string.
@@ -461,6 +466,46 @@ local function ActivityDisplayName(activityID)
         if type(label)=="string" and label~="" then return label end
     end
     return "Activity "..activityID
+end
+
+-- Use the client-supplied suggested *dungeon* levels, not the minimum
+-- entry requirement and not hardcoded Classic ranges. Some activities omit
+-- these fields; an unknown range should never be invented.
+local function SuggestedDungeonLevelLabel(info)
+    info=Readable(info)
+    if type(info)~="table" or Readable(info.categoryID)~=2 then return nil end
+    local low=Readable(info.minLevelSuggestion)
+    local high=Readable(info.maxLevelSuggestion)
+    if type(low)~="number" or type(high)~="number"
+        or low<1 or high<low or low~=math.floor(low) or high~=math.floor(high) then
+        return nil
+    end
+    return ("Lv %d-%d"):format(low,high)
+end
+
+local function ActivityDungeonLevelLabel(activityID)
+    if type(activityID)~="number" or not C_LFGList
+        or type(C_LFGList.GetActivityInfoTable)~="function" then return nil end
+    local ok,info=pcall(C_LFGList.GetActivityInfoTable,activityID)
+    return ok and SuggestedDungeonLevelLabel(info) or nil
+end
+
+-- For multi-activity groups, favor the selected dungeon; otherwise use the
+-- first dungeon carrying a suggested range. Tooltips list each separately.
+local function ResultDungeonLevelLabel(info)
+    local ids=ResultActivityIDs(info)
+    if state.activityID then
+        for _,id in ipairs(ids) do
+            if id==state.activityID then
+                local label=ActivityDungeonLevelLabel(id)
+                if label then return label end
+            end
+        end
+    end
+    for _,id in ipairs(ids) do
+        local label=ActivityDungeonLevelLabel(id)
+        if label then return label end
+    end
 end
 
 local function ResultActivityNames(info)
@@ -1410,6 +1455,7 @@ UpdatePages = function()
         row.descriptionPreview:SetText("")
         row.descriptionPreview:Hide()
         row.noteIcon:Hide()
+        row.dungeonLevelLabel=nil
         if not resultID then
             row:Hide()
         else
@@ -1437,6 +1483,7 @@ UpdatePages = function()
                 row.related:SetText(RelatedLabel(info))
                 row.socialCounts=RelatedCounts(info)
                 row.activity:SetText(SafeMarkup(Truncate(activity,29)))
+                row.dungeonLevelLabel=ResultDungeonLevelLabel(info)
                 -- Avoid displaying cached Kstring tokens from unverifiable rows.
                 local description=verified and DescriptionForDisplay(info.comment) or nil
                 row.descriptionDisplay=description
@@ -1462,7 +1509,10 @@ UpdatePages = function()
                 local isNew=verified and IsNewListing(resultID,info)
                 -- NEW is earned only by observing a fresh listing on a completed
                 -- user search; age alone never proves a group is still active.
-                row.playstyle:SetText(Truncate(ResultPlaystyle(info), 18)
+                row.playstyle:SetText(
+                    (row.dungeonLevelLabel and
+                        ("|cff84cfff"..row.dungeonLevelLabel.."|r  ") or "")
+                    ..Truncate(ResultPlaystyle(info),row.dungeonLevelLabel and 12 or 18)
                     ..(isNew and "  |cff69e3a2NEW|r" or "")
                     ..(age and ("  |cffaaaaaa"..age.."|r") or ""))
                 row.sentBadge:SetText(rec and (replyStatus=="Replied"
@@ -1614,7 +1664,10 @@ local function GetActivities(categoryID)
                         aliases[#aliases+1]=alias
                     end
                 end
-                table.insert(arr,{id=id,name=display,searchText=table.concat(aliases," "):lower()})
+                table.insert(arr,{
+                    id=id,name=display,searchText=table.concat(aliases," "):lower(),
+                    levelLabel=SuggestedDungeonLevelLabel(info),
+                })
             end
         end
     end
@@ -1674,7 +1727,16 @@ end
 
 local function SelectActivity(id,name)
     state.activityID, state.activityName = id,name
-    if activityDropdown then activityDropdown:OverrideText(name or "All activities") end
+    if activityDropdown then
+        local caption=name or "All activities"
+        for _,item in ipairs(state.activities) do
+            if item.id==id and item.levelLabel then
+                caption=caption.." ("..item.levelLabel..")"
+                break
+            end
+        end
+        activityDropdown:OverrideText(caption)
+    end
     -- Clearing the query after selection makes the next menu complete again.
     state.activitySearchQuery=""
     if activitySearchBox then activitySearchBox:SetText("") end
@@ -1904,7 +1966,8 @@ local function BuildSearchControls(window)
         if #choices==0 then root:CreateTitle("No matching activities") end
         for _, item in ipairs(choices) do
             local activityID, activityName = item.id, item.name
-            root:CreateRadio(activityName,
+            local caption=activityName..(item.levelLabel and (" ("..item.levelLabel..")") or "")
+            root:CreateRadio(caption,
                 function(id) return state.activityID == id end,
                 function(id) SelectActivity(id,activityName) end, activityID)
         end
@@ -2250,8 +2313,18 @@ local function CreateWindow()
                 local activities=row.activityNames
                 if type(activities)=="table" and #activities>0 then
                     GameTooltip:AddLine(#activities>1 and "Activities:" or "Activity:",1,.82,0)
+                    local info=ResultInfo(row.resultID)
+                    local ids=type(info)=="table" and ResultActivityIDs(info) or {}
                     for _,activityName in ipairs(activities) do
-                        GameTooltip:AddLine("  "..SafeMarkup(activityName),.85,.9,1)
+                        local display=activityName
+                        for _,id in ipairs(ids) do
+                            if ActivityDisplayName(id)==activityName then
+                                local level=ActivityDungeonLevelLabel(id)
+                                if level then display=display.." ("..level..")" end
+                                break
+                            end
+                        end
+                        GameTooltip:AddLine("  "..SafeMarkup(display),.85,.9,1)
                     end
                 end
                 if row.descriptionDisplay then
@@ -2521,6 +2594,12 @@ ToggleWindow = function()
     end
 end
 
+-- Bindings.xml invokes this handler; it reuses the minimap and /qj toggle
+-- without binding a protected search, whisper, invite, or other game action.
+function ForeverQuickJoin_ToggleWindow()
+    if ToggleWindow then ToggleWindow() end
+end
+
 SLASH_FOREVERQUICKJOIN1 = "/qj"
 SLASH_FOREVERQUICKJOIN2 = "/quickjoin"
 SLASH_FOREVERQUICKJOIN3 = "/fqj"
@@ -2655,7 +2734,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
                 end
             end)
         end
-        Print("v0.8.2 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        Print("v0.8.3 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
