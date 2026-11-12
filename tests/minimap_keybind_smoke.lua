@@ -1,7 +1,7 @@
 -- WoW Lua 5.1: minimap tooltip should display full modifier names.
 local f=assert(io.open("ForeverQuickJoin.lua","rb"))
 local source=f:read("*a");f:close()
-local start=assert(source:find("local function FormatBindingKey()",1,true))
+local start=assert(source:find("local function FormatBindingKey(",1,true))
 local finish=assert(source:find("\nlocal function CreateMinimapButton()",start,true))
 local code=source:sub(start,finish-1):gsub("^local function ","function ",1)
 local keys={"CTRL-I"}
