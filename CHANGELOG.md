@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.4 — 2026-11-12
+
+- Assigned **Ctrl+I** as the native default shortcut for **Toggle Forever QuickJoin**.
+- The shortcut remains fully customizable, including character-specific bindings through WoW's own Keybindings UI. No login-time binding overrides or forced resets are used.
+- Updated binding and packaging regression coverage for the default shortcut.
+
+
 ## 0.8.3 — 2026-11-12
 
 - Added a **Toggle Forever QuickJoin** action to WoW's native Keybindings menu. WoW handles the chosen shortcut and character-specific/account bindings; no default key is forced.

@@ -16,8 +16,13 @@ assert len(actions) == 1, "Expect one player-configurable toggle action"
 binding = actions[0]
 assert binding.attrib["name"] == "FOREVERQUICKJOIN_TOGGLE"
 assert binding.attrib["header"] == "FOREVERQUICKJOIN"
-assert binding.attrib.get("default") is None, "Do not steal player key combinations"
+assert binding.attrib.get("default") == "CTRL-I", "Ctrl+I must be the native default key"
 assert (binding.text or "").strip() == "ForeverQuickJoin_ToggleWindow()"
+# Default is declarative only; never force-remap or save user keys from Lua.
+source = (ROOT / "ForeverQuickJoin.lua").read_text()
+assert not re.search(r"\\b(?:SetBinding|SetOverrideBinding|SaveBindings)\\s*\\(", source), (
+    "Never overwrite user-managed binding sets programmatically"
+)
 
 import sys
 sys.path.insert(0, str(ROOT / "scripts"))

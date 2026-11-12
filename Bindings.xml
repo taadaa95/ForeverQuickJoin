@@ -1,5 +1,5 @@
 <Bindings>
-  <Binding name="FOREVERQUICKJOIN_TOGGLE" header="FOREVERQUICKJOIN">
+  <Binding name="FOREVERQUICKJOIN_TOGGLE" header="FOREVERQUICKJOIN" default="CTRL-I">
     ForeverQuickJoin_ToggleWindow()
   </Binding>
 </Bindings>
