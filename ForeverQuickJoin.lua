@@ -1,4 +1,4 @@
--- Forever QuickJoin 0.8.4 -- multi-activity listing display, search matching and stable tracking.
+-- Forever QuickJoin 0.8.5 -- multi-activity listing display, search matching and stable tracking.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
@@ -2527,6 +2527,25 @@ local function UpdateMinimapPosition()
         math.cos(math.rad(angle)) * radius, math.sin(math.rad(angle)) * radius)
 end
 
+-- Resolve the binding on every mouseover, not at login. WoW can change
+-- the binding (and its character-specific binding set) while the addon runs.
+-- Prefer Blizzard's localized key labels and preserve player choices.
+local function CurrentToggleBindingText()
+    if type(GetBindingKey)~="function" then return "Unavailable" end
+    local primary,secondary=GetBindingKey("FOREVERQUICKJOIN_TOGGLE")
+    local function DisplayKey(key)
+        if type(key)~="string" or key=="" then return nil end
+        if type(GetBindingText)=="function" then
+            local text=GetBindingText(key,"KEY_",false)
+            if type(text)=="string" and text~="" then return text end
+        end
+        return key
+    end
+    local first,second=DisplayKey(primary),DisplayKey(secondary)
+    if first and second then return first.." / "..second end
+    return first or second or "Not bound"
+end
+
 local function CreateMinimapButton()
     if minimapButton or not Minimap then return end
     minimapButton = CreateFrame("Button", "ForeverQuickJoinMinimapButton", Minimap)
@@ -2551,6 +2570,7 @@ local function CreateMinimapButton()
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:AddLine("Forever QuickJoin", 1, 0.82, 0)
         GameTooltip:AddLine("Left-click: open / close", 1, 1, 1)
+        GameTooltip:AddLine("Keybind: "..CurrentToggleBindingText(), .70, .88, 1)
         GameTooltip:AddLine("Drag: move around minimap", 1, 1, 1)
         GameTooltip:Show()
     end)
@@ -2733,7 +2753,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
                 end
             end)
         end
-        Print("v0.8.4 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        Print("v0.8.5 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
