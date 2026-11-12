@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.5 — 2026-11-12
+
+- Minimap tooltip now displays the player's **current** Toggle Forever QuickJoin keybinding, rather than assuming the default Ctrl+I.
+- Dynamically reads WoW's keybinding settings on each mouseover, including character-specific overrides and secondary shortcuts; shows **Not bound** when unassigned.
+- Uses WoW's localized keybinding labels when available, and falls back to raw key names on clients without that formatter.
+- Added Lua 5.1 regression coverage. Existing saved bindings, native default, and protected actions are unchanged.
+
+
 ## 0.8.4 — 2026-11-12
 
 - Assigned **Ctrl+I** as the native default shortcut for **Toggle Forever QuickJoin**.
