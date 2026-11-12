@@ -49,8 +49,8 @@ assert(source:find('row.dungeonLevelLabel=ResultDungeonLevelLabel(info)',1,true)
     "finder rows must show the selected level range")
 assert(source:find('local level=ActivityDungeonLevelLabel(id)',1,true),
     "tooltip must show per-activity levels")
-assert(source:find('BINDING_HEADER_FOREVERQUICKJOIN = "Forever QuickJoin"',1,true),
-    "native binding header must be readable")
+assert(not source:find("BINDING_HEADER_FOREVERQUICKJOIN",1,true),
+    "do not register a second HEADER_ action in Forever's binding UI")
 assert(source:find('BINDING_NAME_FOREVERQUICKJOIN_TOGGLE = "Toggle Forever QuickJoin"',1,true),
     "native binding name must be readable")
 assert(source:find('function ForeverQuickJoin_ToggleWindow()',1,true),

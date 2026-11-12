@@ -1,13 +1,12 @@
--- Forever QuickJoin 0.8.3 -- multi-activity listing display, search matching and stable tracking.
+-- Forever QuickJoin 0.8.4 -- multi-activity listing display, search matching and stable tracking.
 -- C_LFGList.Search is restricted: call it ONLY from the player's Search button
 -- OnClick, using a valid category ID and the activity list exactly like Blizzard
 -- and LFG Forever. NEVER call it on login/show/refresh/timer/dropdown callbacks.
 -- A client may still block the action; retain cached-results fallback.
 local addonName = ...
 
--- Binding names appear in Blizzard's Keybindings UI. The player controls
--- whether WoW saves bindings for this character or across characters.
-BINDING_HEADER_FOREVERQUICKJOIN = "Forever QuickJoin"
+-- The binding appears under WoW's Other category without an extra header
+-- action. WoW manages account-wide and character-specific key assignments.
 BINDING_NAME_FOREVERQUICKJOIN_TOGGLE = "Toggle Forever QuickJoin"
 local PREFIX = "|cff62c8efQuickJoin|r: "
 local PREVIOUS_DEFAULT_MESSAGE = "Level {level} {class} {role} LFG {activity}, can summon. Inv pls!"
@@ -2734,7 +2733,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
                 end
             end)
         end
-        Print("v0.8.3 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        Print("v0.8.4 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
