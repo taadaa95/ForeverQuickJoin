@@ -1210,8 +1210,8 @@ local function SetSort(order)
 end
 
 -- A member's zone is not guaranteed to be in the LFG listing. A right-click
--- prepares a targeted /who; the player must press Enter. This avoids protected
--- addon-driven Who requests and complies with the server's query cooldown.
+-- opens a player-action menu; /who and whisper only prepare text in the chat
+-- edit box. Submitting either action is always a separate player keypress.
 local function WhoNameKey(name)
     name = Readable(name)
     if type(name) ~= "string" or name == "" then return nil end
@@ -1245,6 +1245,46 @@ local function LookupMemberWho(name)
         ChatFrame_OpenChat(cmd)
     end
     Print("Prepared " .. cmd .. ". Press Enter to look up the location; /who can be throttled.")
+end
+
+-- Context menu actions are click initiated and only populate Blizzard's chat
+-- edit box; QuickJoin never sends a whisper or WHO request from this menu.
+local function PrepareMemberWhisper(name)
+    if not WhoNameKey(name) then
+        Print("This member's name is not available; a whisper cannot be prepared.")
+        return
+    end
+    local cmd = "/w " .. name .. " "
+    if ChatFrameUtil and type(ChatFrameUtil.OpenChat) == "function" then
+        ChatFrameUtil.OpenChat(cmd)
+    elseif type(ChatFrame_OpenChat) == "function" then
+        ChatFrame_OpenChat(cmd)
+    else
+        Print("The chat input is unavailable. Open a whisper manually instead.")
+        return
+    end
+    Print("Prepared whisper to " .. name .. ". Type your message and press Enter to send.")
+end
+
+local function OpenMemberContextMenu(tile)
+    -- Capture the validated name before creating callbacks. Expanded group
+    -- tiles are reused between searches; never resolve a different player
+    -- when a menu action is selected.
+    local name = tile and Readable(tile.whoName)
+    if not WhoNameKey(name) then
+        Print("This player's name is hidden; /who and whisper are unavailable.")
+        return
+    end
+    if not MenuUtil or type(MenuUtil.CreateContextMenu) ~= "function" then
+        Print("The client does not provide the player context menu API.")
+        return
+    end
+    if GameTooltip then GameTooltip:Hide() end
+    MenuUtil.CreateContextMenu(tile, function(_, root)
+        root:CreateTitle(name) -- WhoNameKey rejects embedded WoW markup.
+        root:CreateButton("Prepare /who", function() LookupMemberWho(name) end)
+        root:CreateButton("Prepare Whisper", function() PrepareMemberWhisper(name) end)
+    end)
 end
 
 -- Only use native LFG data or a successful, manually initiated WHO response.
@@ -1320,7 +1360,7 @@ local function PopulateMemberDetails(row, resultID, info)
     local showComment=comment~=nil
     local activityNames=ResultActivityNames(info)
     local multiple=#activityNames>1
-    row.detailsTitle:SetText(("GROUP MEMBERS (%d)  ·  Right-click a named player to look up their area (/who)"):format(n))
+    row.detailsTitle:SetText(("GROUP MEMBERS (%d)  ·  Right-click: /who or whisper"):format(n))
     row.detailsActivities:SetShown(multiple)
     if multiple then
         row.detailsActivities:SetText("Activities: "..
@@ -1377,17 +1417,17 @@ local function PopulateMemberDetails(row, resultID, info)
                 tile.subtitle:SetSize(332, 17)
                 tile.subtitle:SetJustifyH("LEFT")
                 tile:EnableMouse(true)
-                tile:SetScript("OnMouseUp", function(self, button)
-                    if button == "RightButton" then LookupMemberWho(self.whoName) end
+                tile:SetScript("OnMouseDown", function(self, button)
+                    if button == "RightButton" then OpenMemberContextMenu(self) end
                 end)
                 tile:SetScript("OnEnter", function(self)
                     if not GameTooltip then return end
                     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                    GameTooltip:AddLine(self.whoName and "Right-click: Look up player location" or
-                        "Player name is hidden; /who unavailable")
+                    GameTooltip:AddLine(self.whoName and "Right-click: /who or whisper" or
+                        "Player name is hidden; actions unavailable")
                     if self.whoName then
-                        GameTooltip:AddLine("Prepares /who; press Enter to submit.", 0.8, 0.8, 0.8)
-                        GameTooltip:AddLine("Locations are WHO snapshots, not live tracking.", 0.7, 0.7, 0.7)
+                        GameTooltip:AddLine("Choose a chat action from the right-click menu.", 0.8, 0.8, 0.8)
+                        GameTooltip:AddLine("Nothing is sent until you press Enter.", 0.7, 0.7, 0.7)
                     end
                     GameTooltip:Show()
                 end)

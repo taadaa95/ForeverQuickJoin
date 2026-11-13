@@ -33,7 +33,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y lua5.1
-          luac5.1 -p ForeverQuickJoin.lua ForeverQuickJoin_Host.lua ForeverQuickJoin_Party.lua ForeverQuickJoin_Applications.lua ForeverQuickJoin_Theme.lua ForeverQuickJoin_Listing.lua tests/listing_creator_smoke.lua tests/applications_smoke.lua tests/composition_smoke.lua tests/sent_lifecycle_smoke.lua tests/theme_smoke.lua tests/multi_activity_smoke.lua tests/ui_features_smoke.lua tests/description_smoke.lua tests/tab_isolation_smoke.lua tests/dungeon_keybind_smoke.lua tests/minimap_keybind_smoke.lua tests/chat_release_smoke.lua
+          luac5.1 -p ForeverQuickJoin.lua ForeverQuickJoin_Host.lua ForeverQuickJoin_Party.lua ForeverQuickJoin_Applications.lua ForeverQuickJoin_Theme.lua ForeverQuickJoin_Listing.lua tests/listing_creator_smoke.lua tests/applications_smoke.lua tests/composition_smoke.lua tests/sent_lifecycle_smoke.lua tests/theme_smoke.lua tests/multi_activity_smoke.lua tests/ui_features_smoke.lua tests/description_smoke.lua tests/tab_isolation_smoke.lua tests/dungeon_keybind_smoke.lua tests/minimap_keybind_smoke.lua tests/chat_release_smoke.lua tests/member_context_smoke.lua
           lua5.1 tests/applications_smoke.lua
           lua5.1 tests/composition_smoke.lua
           lua5.1 tests/sent_lifecycle_smoke.lua
@@ -43,7 +43,7 @@ jobs:
           lua5.1 tests/description_smoke.lua
           lua5.1 tests/tab_isolation_smoke.lua
           lua5.1 tests/dungeon_keybind_smoke.lua
-          lua5.1 tests/minimap_keybind_smoke.lua tests/chat_release_smoke.lua
+          lua5.1 tests/minimap_keybind_smoke.lua tests/chat_release_smoke.lua tests/member_context_smoke.lua
           lua5.1 tests/listing_creator_smoke.lua
 
       - name: Package for WoW Forever and WowUp
