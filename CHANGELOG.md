@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.0 — 2026-11-13
+
+- Integrated **Create Listing** directly into Forever QuickJoin; no companion Host Preview addon required. Remove the preview before installing.
+- Added **Manage Listing** with searchable multi-select activities, dungeon suggested levels, Show all level ranges, category/playstyle dropdowns, and a selected-activities summary.
+- Embedded Blizzard's original protected description editor in QuickJoin. Its text remains protected: no reading, copying, pasting or programmatic changes. It is restored to Blizzard's UI when switching views.
+- Added direct player-clicked listing creation and updating, two-click Delist confirmation, and post-submit checks for active activities, protected description presence, and client-side playstyle resets.
+- Reorganized navigation: **Find Groups** and **Create Listing** main tabs; My Applications with Back to Listings inside Find Groups; Manage Listing and Applicants within Create Listing.
+- Added active-tab highlighting, aligned Finder actions, preserved the permanent party-role summary, and kept the Change Roles dialog opaque while supporting theme transparency elsewhere.
+- Removed the obsolete **Click a row to view members** text that overlapped My Applications.
+- Fixed the window at **840 × 785** and removed the resize grip.
+- Use `/qjlisting export` for optional redacted listing diagnostics. No automatic group searches, listing submissions or keybinding changes.
+- README intentionally unchanged.
+
+
 ## 0.8.6 — 2026-11-12
 
 - Fixed the minimap keybinding tooltip showing WoW's abbreviated **c+I** instead of **Ctrl + I**.

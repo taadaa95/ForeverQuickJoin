@@ -1,4 +1,4 @@
--- Lua 5.1 regression checks for v0.8.0 activity filtering, alerts, and scale.
+-- Lua 5.1 regression checks for activity filtering, alerts and fixed-size window.
 local main=assert(io.open("ForeverQuickJoin.lua","rb")):read("*a")
 local apps=assert(io.open("ForeverQuickJoin_Applications.lua","rb")):read("*a")
 local function Piece(source,first,last)
@@ -15,10 +15,9 @@ local env={state={activities={
 }}}
 setmetatable(env,{__index=_G})
 local program=assert(loadstring(Piece(main,"FilterActivities","SetAllowedActivities").."\n"..
-    Piece(main,"ClampWindowScale","CreateWindow").."\n"..
-    "return FilterActivities,ClampWindowScale"))
+    "return FilterActivities"))
 setfenv(program,env)
-local filter,scale=program()
+local filter=program()
 assert(#filter("")==4 and #filter(nil)==4,"empty query restores all activities")
 assert(#filter("SCARLET")==2 and filter("scarlet")[1].id==1,"case-insensitive filtering")
 assert(#filter("  storm  ")==1 and filter("storm")[1].id==2,"trim query")
@@ -26,12 +25,13 @@ assert(#filter("some unknown dungeon")==0,"nonmatching activity excluded")
 env.state.activities[5]={id=5,name="Forest",searchText="forest duskwood eastern kingdoms"}
 assert(#filter("duskwood")==1 and filter("duskwood")[1].id==5,
     "available activity/zone aliases should be searchable")
-assert(scale(0.3)==0.7 and scale(5)==1.45,"resize limits")
-assert(scale("broken")==1 and scale(1.2)==1.2,"invalid/default and valid scale")
+assert(main:find("window:SetSize(840, 785)",1,true),"standard window dimensions")
+assert(main:find("window:SetScale(1)",1,true),"fixed 100% window scale")
 assert(main:find("local choices=FilterActivities(state.activitySearchQuery)",1,true))
 assert(main:find("activitySearchBox:SetScript(\"OnEnterPressed\"",1,true))
-assert(main:find("grip:SetScript(\"OnMouseDown\"",1,true))
-assert(main:find("db.windowScale=ClampWindowScale(window:GetScale())",1,true))
+assert(not main:find("AttachResizeGrip(",1,true),"resize grip should be removed")
+assert(not main:find("ClampWindowScale(",1,true),"resize scale helper should be removed")
+assert(not main:find("Click a row to view members",1,true),"obsolete helper label must be removed")
 assert(main:find("searchButton:SetScript(\"OnClick\", SearchFromClick)",1,true),
     "search must still be explicitly player initiated")
 

@@ -1,12 +1,13 @@
 ## Interface: 16001
 ## Title: Forever QuickJoin
-## Notes: Find groups by activity and playstyle, open native listing, manage role-sorted whispers. /qj
+## Notes: Find groups, create and manage multi-activity listings, and handle applicants. /qj
 ## Category: Group Finder
-## Version: 0.8.6
-## SavedVariablesPerCharacter: ForeverQuickJoinDB
+## Version: 0.9.0
+## SavedVariablesPerCharacter: ForeverQuickJoinDB, ForeverQuickJoinListingDB
 
 ForeverQuickJoin.lua
 ForeverQuickJoin_Host.lua
 ForeverQuickJoin_Party.lua
 ForeverQuickJoin_Applications.lua
 ForeverQuickJoin_Theme.lua
+ForeverQuickJoin_Listing.lua
