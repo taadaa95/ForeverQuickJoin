@@ -857,6 +857,87 @@ Refresh = function()
     if status and status:GetText()=="" then status:SetText("LFG Chat ready; /qjchat test inserts sample posts.") end
 end
 
+
+-- Right-click menu for public LFG Chat sender names, matching Group Listings.
+-- Name validation prevents using chat text as slash commands or Blizzard markup.
+local function ContextPlayerName(value)
+    value=Readable(value)
+    if type(value)~="string" or value=="" or #value>96 then return nil end
+    if value:find('[|"/%c%s]') then return nil end
+    return value
+end
+
+local function PrepareSenderChat(command)
+    if ChatFrameUtil and type(ChatFrameUtil.OpenChat)=="function" then
+        ChatFrameUtil.OpenChat(command)
+        return true
+    elseif type(ChatFrame_OpenChat)=="function" then
+        ChatFrame_OpenChat(command)
+        return true
+    end
+    Print("Blizzard's chat edit box is unavailable.")
+    return false
+end
+
+local function OpenSenderContextMenu(owner,entry)
+    if type(entry)~="table" or entry.synthetic then return end
+    local name=ContextPlayerName(entry.sender)
+    if not name then
+        Print("This LFG Chat post does not expose a usable player name.")
+        return
+    end
+    if not MenuUtil or type(MenuUtil.CreateContextMenu)~="function" then
+        Print("The client does not provide the player context menu API.")
+        return
+    end
+    if GameTooltip then GameTooltip:Hide() end
+    -- Rows are recycled when scrolling; capture this exact validated sender.
+    MenuUtil.CreateContextMenu(owner,function(_,menu)
+        menu:CreateTitle(name)
+        menu:CreateButton("Prepare /who",function()
+            if C_FriendList and type(C_FriendList.SetWhoToUi)=="function" then
+                pcall(C_FriendList.SetWhoToUi,true)
+            end
+            if PrepareSenderChat('/who n-"'..name..'"') then
+                Print("/who prepared for "..name..". Press Enter to submit.")
+            end
+        end)
+        menu:CreateButton("Prepare Whisper",function()
+            if PrepareSenderChat("/w "..name.." ") then
+                Print("Whisper prepared for "..name..". Type a message and press Enter.")
+            end
+        end)
+    end)
+end
+
+local function InstallSenderHitbox(row)
+    -- The sender is a FontString, so put a transparent right-click button
+    -- over the name only; the regular Whisper and Invite buttons are untouched.
+    local hitbox=CreateFrame("Button",nil,row)
+    hitbox:SetPoint("TOPLEFT",row,"TOPLEFT",8,-3)
+    hitbox:SetSize(180,21)
+    hitbox:RegisterForClicks("RightButtonUp")
+    if type(hitbox.SetFrameLevel)=="function" and type(row.GetFrameLevel)=="function" then
+        hitbox:SetFrameLevel(row:GetFrameLevel()+2)
+    end
+    hitbox:SetScript("OnClick",function(self,button)
+        if button=="RightButton" then OpenSenderContextMenu(self,row.entry) end
+    end)
+    hitbox:SetScript("OnEnter",function(self)
+        local e=row.entry
+        if type(e)~="table" or e.synthetic or not ContextPlayerName(e.sender)
+            or not GameTooltip then return end
+        GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
+        GameTooltip:AddLine("Right-click: /who or whisper")
+        GameTooltip:AddLine("Actions only prepare chat; press Enter to send.",.8,.8,.8)
+        GameTooltip:Show()
+    end)
+    hitbox:SetScript("OnLeave",function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    row.senderHitbox=hitbox
+end
+
 local function InstallChatPanel(window)
     if chatPanel then return end
     chatPanel = CreateFrame("Frame", nil, window)
@@ -888,6 +969,7 @@ local function InstallChatPanel(window)
         row:SetBackdrop({bgFile="Interface\\Buttons\\WHITE8X8"})
         row:SetBackdropColor(.09,.11,.16,1)
         row.name=Label(row,"",8,4,179,19,"GameFontHighlight")
+        InstallSenderHitbox(row)
         row.kind=Label(row,"",195,4,36,19,"GameFontNormal")
         row.activity=Label(row,"",239,4,275,19)
         row.info=Label(row,"",8,24,505,16)

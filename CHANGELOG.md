@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.6 — 2026-11-13
+
+- Added a right-click menu to sender names in **LFG Chat** with **Prepare /who** and **Prepare Whisper**, matching expanded Group Listings. Both actions only populate Blizzard's chat edit box, and neither sends automatically.
+- The permanent party-role panel now displays Blizzard's original high-resolution Tank, Healer, and DPS icons with circular backgrounds, as approved in the local v0.9.6 test. Role counts are updated from QuickJoin's existing party snapshot; role overrides and the separate Role Manager are unchanged.
+- Kept the original compact role icons in listing rows and the Role Manager. Chat sender names and protected/unavailable player names are validated before creating a menu.
+- Integrated both features into the primary addon; remove the `ForeverQuickJoin096Test` companion test folder before updating. The README remains unchanged.
+
 ## 0.9.5 — 2026-11-13
 
 - Expanded Group Listings now offer a native right-click context menu on named group members, with **Prepare /who** and **Prepare Whisper** options.

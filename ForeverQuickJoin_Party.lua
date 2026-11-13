@@ -12,6 +12,52 @@ local ROLE_ICON_NATIVE = {
     HEALER="|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp:19:19:0:0:64:64:20:39:1:20|t",
     DAMAGER="|TInterface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES.blp:19:19:0:0:64:64:20:39:22:41|t",
 }
+
+-- Original large Blizzard LFG icons and circular backgrounds (not enlarged
+-- 19x19 PORTRAITROLES sprites). Applied only to the permanent role summary.
+local LARGE_ROLE_ART="Interface\\LFGFrame\\UI-LFG-ICON-ROLES"
+local LARGE_ROLE_BACKGROUND="Interface\\LFGFrame\\UI-LFG-ICONS-ROLEBACKGROUNDS"
+local LARGE_ROLE_DATA={
+    {key="TANK",x=16, art={0,67/256,67/256,134/256}, bg={75/256,150/256,0,75/128}},
+    {key="HEALER",x=150, art={67/256,134/256,0,67/256}, bg={0,75/256,0,75/128}},
+    {key="DAMAGER",x=286, art={67/256,134/256,67/256,134/256}, bg={150/256,225/256,0,75/128}},
+}
+local largeRoleIcons,summaryUnknown={},nil
+
+local function SetLargeRoleCoords(texture,helper,role,fallback)
+    -- Prefer the same coordinate helpers used by Blizzard's original LFG UI.
+    if type(helper)=="function" then
+        local ok,a,b,c,d=pcall(helper,role)
+        if ok and type(a)=="number" and type(b)=="number"
+            and type(c)=="number" and type(d)=="number"
+            and a>=0 and a<b and b<=1 and c>=0 and c<d and d<=1 then
+            texture:SetTexCoord(a,b,c,d)
+            return
+        end
+    end
+    texture:SetTexCoord(fallback[1],fallback[2],fallback[3],fallback[4])
+end
+
+local function CreateSummaryRoleIcon(frame,role)
+    local background=frame:CreateTexture(nil,"ARTWORK")
+    background:SetTexture(LARGE_ROLE_BACKGROUND)
+    background:SetSize(63,63)
+    background:SetPoint("TOPLEFT",frame,"TOPLEFT",role.x,-6)
+    SetLargeRoleCoords(background,GetBackgroundTexCoordsForRole,role.key,role.bg)
+    background:SetAlpha(.8)
+    local icon=frame:CreateTexture(nil,"OVERLAY")
+    icon:SetTexture(LARGE_ROLE_ART)
+    icon:SetSize(54,54)
+    icon:SetPoint("CENTER",background,"CENTER",0,0)
+    SetLargeRoleCoords(icon,GetTexCoordsForRole,role.key,role.art)
+    local number=frame:CreateFontString(nil,"OVERLAY","GameFontNormalLarge")
+    number:SetPoint("TOPLEFT",frame,"TOPLEFT",role.x+67,-24)
+    number:SetSize(32,25)
+    number:SetJustifyH("LEFT")
+    number:SetText("0")
+    return {key=role.key,count=number}
+end
+
 -- Original WoW classes with more than one traditional group role.
 -- Forever customizations cannot reliably be inferred from class or spec;
 -- overrides remain available for EVERY class.
@@ -210,10 +256,14 @@ local function RefreshView()
         else
             summaryTitle:SetText("Solo — role: "..(ROLE_NAME[members[1].role] or "Unknown"))
         end
-        summaryCounts:SetText(ROLE_ICON_NATIVE.TANK.." "..count.TANK.."    "
-            ..ROLE_ICON_NATIVE.HEALER.." "..count.HEALER.."    "
-            ..ROLE_ICON_NATIVE.DAMAGER.." "..count.DAMAGER
-            ..(count.UNKNOWN>0 and ("   Unassigned: "..count.UNKNOWN) or ""))
+        -- Large summary counters read the authoritative role tally directly;
+        -- no hidden FontString parsing, polling, or role recomputation.
+        for _,entry in ipairs(largeRoleIcons) do
+            entry.count:SetText(tostring(count[entry.key] or 0))
+        end
+        if summaryUnknown then
+            summaryUnknown:SetText(count.UNKNOWN>0 and ("Unassigned: "..count.UNKNOWN) or "")
+        end
         summaryNotice:SetText(review>0 and (review.." role"..(review==1 and "" or "s").." need review")
             or (grouped and "Roles confirmed" or "Current character"))
         summaryNotice:SetTextColor(review>0 and 1 or .65, review>0 and .77 or .85, review>0 and .35 or .7)
@@ -297,9 +347,16 @@ function Party.Attach(window)
     summary:SetFrameLevel(window:GetFrameLevel()+30)
     summary:SetBackdrop({bgFile="Interface\\Buttons\\WHITE8X8",edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",edgeSize=10,insets={left=1,right=1,top=1,bottom=1}})
     summary:SetBackdropColor(.07,.09,.12,1)
-    summaryTitle=Label(summary,"Party detected",15,8,340,25,"GameFontNormalLarge")
-    summaryNotice=Label(summary,"",354,11,230,21,"GameFontNormalSmall")
+    -- Preserve a native summary label for any future data hooks, but show
+    -- the approved large Blizzard role circles rather than portrait sprites.
+    summaryTitle=Label(summary,"Party detected",421,9,186,25,"GameFontNormalLarge")
+    summaryNotice=Label(summary,"",421,35,180,20,"GameFontNormalSmall")
     summaryCounts=Label(summary,"",15,39,584,32,"GameFontNormalLarge")
+    summaryCounts:Hide()
+    for _,role in ipairs(LARGE_ROLE_DATA) do
+        largeRoleIcons[#largeRoleIcons+1]=CreateSummaryRoleIcon(summary,role)
+    end
+    summaryUnknown=Label(summary,"",421,57,180,15,"GameFontNormalSmall")
     reviewButton=Button(summary,"Change Roles",614,22,158,35,Party.Open)
 
     manager=CreateFrame("Frame","ForeverQuickJoinRoleManager",window,"BackdropTemplate")
