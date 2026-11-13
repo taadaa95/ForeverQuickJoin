@@ -20,6 +20,7 @@ end
 local ValidName,PrepareChat,OpenSenderMenu,Hitbox =
     Extract(chat,"local function ContextPlayerName(","local function InstallChatPanel(window)",
         "return ContextPlayerName,PrepareSenderChat,OpenSenderContextMenu,InstallSenderHitbox")
+Readable=function(v) return v end
 assert(ValidName("Player-Realm")=="Player-Realm")
 assert(not ValidName('Bad"/who') and not ValidName("Bad Name"))
 local opened={}
