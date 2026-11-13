@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.4 — 2026-11-13
+
+- Integrated **LFG Chat** into Forever QuickJoin's Find Groups panel alongside **Group Listings**. Posts are collected from incoming public channels (including LookingForGroup, General, and Trade), Say, and Yell, with deduplication and a ten-minute expiration.
+- Added optional, rate-limited automatic joining of the LookingForGroup channel. Use `/qjchat autojoin off` to disable it; `/qjchat diag` shows received-channel and filter diagnostics.
+- LFG Chat now filters recruitment posts by the selected category and, when one activity is selected, that activity's name or known abbreviations. Multi-activity selections currently use category-level filtering.
+- Added a separate **Invite** action to Group Listings for eligible solo leaders, and to individual LFG Chat posters. Invitations are always click-initiated; the UI distinguishes client-confirmed sends, failures, and unconfirmed attempts rather than treating a click as success.
+- Repositioned Find Groups tabs and results beneath the permanent party-role ribbon and removed the redundant top-level Playstyle control. Playstyle exclusions remain in Advanced Filters.
+- Both My Applications and the applicant inbox now prioritize most recently active conversations, moving incoming replies to page one.
+- Whisper contents and chat posts remain in memory only. Existing protected Group Finder searches and listing submissions remain user-initiated. The README is unchanged.
+- If the local **ForeverQuickJoinChatPreview** test addon is installed, remove that folder before updating; this release includes its features directly.
+
+
 ## 0.9.3 — 2026-11-13
 
 - **Find Groups** now supports selecting multiple activities (such as several dungeons) with checkboxes. The dropdown shows the selected count; **All activities (clear selection)** resets the selection.
