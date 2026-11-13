@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.3 — 2026-11-13
+
+- **Find Groups** now supports selecting multiple activities (such as several dungeons) with checkboxes. The dropdown shows the selected count; **All activities (clear selection)** resets the selection.
+- A single player-initiated **Search** request sends the complete selected activity ID list to WoW's Group Finder. With nothing selected, Search covers all available activities in the category.
+- Cached results match **any** selected activity, deduplicating listings advertising more than one selected dungeon. Matching selected dungeons are prioritized in group activity labels and level suggestions.
+- Category changes clear the selection; activity metadata and level-range refreshes preserve still-available selections while dropping unavailable ones. Typing in the activity search box never triggers a server search.
+- New-listing highlights compare the actual submitted search scope rather than an activity selection changed while results were pending.
+
+
 ## 0.9.2 — 2026-11-13
 
 - Party Role Manager now displays **Role: DPS** (or Tank/Healer/Unknown) for the effective role rather than **WoW: DPS**, which could disagree with a manually confirmed override.

@@ -42,8 +42,10 @@ local resultsViewport, resultsCanvas
 local state = {
     categoryID = nil,
     categoryName = nil,
-    activityID = nil,
+    activityID = nil, -- compatibility focus for exactly one selected activity
     activityName = nil,
+    selectedActivityIDs = {}, -- ordered OR selection; empty means all activities
+    selectedActivitySet = {},
     activitySearchQuery = "",
     categories = {},
     activities = {},
@@ -357,9 +359,16 @@ local function IsNewListing(id,info)
     return true
 end
 
-local function TrackSearchAppearances(ids)
+local function TrackSearchAppearances(ids, search)
     local now=GetTime()
-    local scope=tostring(state.categoryID or 0)..":"..tostring(state.activityID or "all")
+    -- The scope must reflect the exact server search, not dropdown changes
+    -- while a response was pending. Sort so selection order doesn't matter.
+    local submitted=search and search.activityIDs or state.searchActivityIDs
+    local sorted={}
+    for _,activityID in ipairs(submitted or {}) do sorted[#sorted+1]=activityID end
+    table.sort(sorted)
+    local category=search and search.categoryID or state.categoryID
+    local scope=tostring(category or 0)..":"..table.concat(sorted,",")
     local previous=state.scopeSearches[scope]
     local present={}
     for _,id in ipairs(ids) do
@@ -489,17 +498,23 @@ local function ActivityDungeonLevelLabel(activityID)
     return ok and SuggestedDungeonLevelLabel(info) or nil
 end
 
--- For multi-activity groups, favor the selected dungeon; otherwise use the
--- first dungeon carrying a suggested range. Tooltips list each separately.
+-- Favor a dungeon explicitly selected in Find Groups, including when the
+-- user chose several. Listings advertise their own (possibly wider) set.
+local function PreferredActivityID(ids)
+    local present={}
+    for _,id in ipairs(ids) do present[id]=true end
+    for _,id in ipairs(state.selectedActivityIDs or {}) do
+        if present[id] then return id end
+    end
+    -- Keep the original one-activity fallback for older saved UI state.
+    if state.activityID and present[state.activityID] then return state.activityID end
+end
 local function ResultDungeonLevelLabel(info)
     local ids=ResultActivityIDs(info)
-    if state.activityID then
-        for _,id in ipairs(ids) do
-            if id==state.activityID then
-                local label=ActivityDungeonLevelLabel(id)
-                if label then return label end
-            end
-        end
+    local preferred=PreferredActivityID(ids)
+    if preferred then
+        local label=ActivityDungeonLevelLabel(preferred)
+        if label then return label end
     end
     for _,id in ipairs(ids) do
         local label=ActivityDungeonLevelLabel(id)
@@ -510,9 +525,9 @@ end
 local function ResultActivityNames(info)
     local ids=ResultActivityIDs(info)
     local names={}
-    local selected=state.activityID
-    -- When searching one dungeon, show the matching dungeon first, even if
-    -- Blizzard lists it as the second or third activity for this group.
+    local selected=PreferredActivityID(ids)
+    -- Show a selected matching dungeon first (single or multi-select), even
+    -- when Blizzard advertises it second or third.
     if selected then
         for _,id in ipairs(ids) do
             if id==selected then
@@ -1092,11 +1107,16 @@ local function RebuildVisibleResults(resetPage)
             local removed = Readable(info.isDelisted)
             if removed == true then MatchSent(id, info) end
             local ids=ResultActivityIDs(info)
-            local match=state.categoryID==nil and state.activityID==nil
+            -- Selected activities are an OR filter. A listing advertising
+            -- several selected dungeons is included once, never duplicated.
+            local selected=state.selectedActivityIDs or {}
+            local hasSelection=#selected>0
+            local match=state.categoryID==nil and not hasSelection
             for _,activityID in ipairs(ids) do
-                if state.activityID and activityID==state.activityID then
+                if hasSelection and state.selectedActivitySet
+                    and state.selectedActivitySet[activityID] then
                     match=true;break
-                elseif state.categoryID and not state.activityID
+                elseif not hasSelection and state.categoryID
                     and state.categoryAllIDs and state.categoryAllIDs[activityID] then
                     match=true;break
                 end
@@ -1588,7 +1608,7 @@ local function RefreshResults(freshSearch, search)
     -- Only a completed click-initiated query is fresh evidence. Reading
     -- GetSearchResultInfo on an old ID can return a cached, defunct group.
     if freshSearch==true then
-        TrackSearchAppearances(ids)
+        TrackSearchAppearances(ids,search)
         state.suppressedIDs={}
     else
         PruneExpiredSent()
@@ -1708,39 +1728,70 @@ local function UpdateSearchButton()
         and #state.searchActivityIDs > 0)
 end
 
+local function UpdateActivityDropdown()
+    local count=#state.selectedActivityIDs
+    local caption="All activities"
+    state.activityID, state.activityName=nil,nil
+    if count==1 then
+        local selected=state.selectedActivityIDs[1]
+        state.activityID=selected
+        for _,item in ipairs(state.activities) do
+            if item.id==selected then
+                state.activityName=item.name
+                caption=item.name..(item.levelLabel and (" ("..item.levelLabel..")") or "")
+                break
+            end
+        end
+    elseif count>1 then
+        caption=count.." activities selected"
+    end
+    if activityDropdown then activityDropdown:OverrideText(caption) end
+end
+
+local function ClearActivitySelection()
+    state.selectedActivityIDs={}
+    state.selectedActivitySet={}
+    UpdateActivityDropdown()
+    -- Changing checkboxes only filters the existing cache. It must not call
+    -- the protected search API without a real Search button click.
+    if window then RebuildVisibleResults(true) end
+    UpdatePreview()
+end
+
+local function ToggleActivity(id)
+    if type(id)~="number" or not state.categoryAllIDs
+        or not state.categoryAllIDs[id] then return end
+    if state.selectedActivitySet[id] then
+        state.selectedActivitySet[id]=nil
+        for index=#state.selectedActivityIDs,1,-1 do
+            if state.selectedActivityIDs[index]==id then
+                table.remove(state.selectedActivityIDs,index)
+                break
+            end
+        end
+    else
+        state.selectedActivitySet[id]=true
+        state.selectedActivityIDs[#state.selectedActivityIDs+1]=id
+    end
+    UpdateActivityDropdown()
+    if window then RebuildVisibleResults(true) end
+    UpdatePreview()
+end
+
 local function SetCategory(id, name)
     state.categoryID, state.categoryName = id, name
+    state.selectedActivityIDs={}
+    state.selectedActivitySet={}
     state.activityID, state.activityName = nil, nil
     state.activitySearchQuery = ""
     if activitySearchBox then activitySearchBox:SetText("") end
     state.activities = GetActivities(id)
     SetAllowedActivities(state.activities)
     if categoryDropdown then categoryDropdown:OverrideText(name or "All categories") end
-    if activityDropdown then
-        activityDropdown:OverrideText("All activities")
-        activityDropdown:SetEnabled(id ~= nil)
-    end
+    UpdateActivityDropdown()
+    if activityDropdown then activityDropdown:SetEnabled(id ~= nil) end
     UpdateSearchButton()
     if window then RefreshResults() end
-end
-
-local function SelectActivity(id,name)
-    state.activityID, state.activityName = id,name
-    if activityDropdown then
-        local caption=name or "All activities"
-        for _,item in ipairs(state.activities) do
-            if item.id==id and item.levelLabel then
-                caption=caption.." ("..item.levelLabel..")"
-                break
-            end
-        end
-        activityDropdown:OverrideText(caption)
-    end
-    -- Clearing the query after selection makes the next menu complete again.
-    state.activitySearchQuery=""
-    if activitySearchBox then activitySearchBox:SetText("") end
-    RefreshResults()
-    UpdatePreview()
 end
 
 local function RefreshCategories()
@@ -1770,20 +1821,19 @@ local function RefreshCategories()
             state.activities = cat.id == 0 and {} or GetActivities(cat.id)
             SetAllowedActivities(state.activities)
             if categoryDropdown then categoryDropdown:OverrideText(cat.name) end
-            local chosenID = state.activityID
-            state.activityID, state.activityName = nil, nil
-            if chosenID then
-                for _, act in ipairs(state.activities) do
-                    if act.id == chosenID then
-                        state.activityID, state.activityName = act.id, act.name
-                        break
-                    end
+            -- Preserve every still-available selection when the client
+            -- refreshes activity metadata, pruning out-of-level/removed IDs.
+            local previous=state.selectedActivityIDs or {}
+            state.selectedActivityIDs={}
+            state.selectedActivitySet={}
+            for _,id in ipairs(previous) do
+                if state.categoryAllIDs[id] then
+                    state.selectedActivityIDs[#state.selectedActivityIDs+1]=id
+                    state.selectedActivitySet[id]=true
                 end
             end
-            if activityDropdown then
-                activityDropdown:OverrideText(state.activityName or "All activities")
-                activityDropdown:SetEnabled(cat.id ~= 0)
-            end
+            UpdateActivityDropdown()
+            if activityDropdown then activityDropdown:SetEnabled(cat.id ~= 0) end
             UpdateSearchButton()
             return
         end
@@ -1807,7 +1857,8 @@ end
 -- early as possible in this handler, before updating/changing UI controls.
 local function SearchFromClick()
     if state.searching or state.searchBlocked or not state.categoryID then return end
-    local activities = state.activityID and {state.activityID} or state.searchActivityIDs
+    local activities = #state.selectedActivityIDs>0
+        and state.selectedActivityIDs or state.searchActivityIDs
     if #activities == 0 then
         Status("Activity list not ready. Use /qj activities, then click Search.")
         return
@@ -1835,7 +1886,9 @@ local function SearchFromClick()
     end
     state.searching = true
     UpdateSearchButton()
-    Status("Searching selected activity... Existing listings remain visible until results arrive.")
+    Status("Searching "..(#state.selectedActivityIDs>0
+        and (#state.selectedActivityIDs.." selected activities") or "all activities")
+        .."... Existing listings remain visible until results arrive.")
     if state.timeout and state.timeout.Cancel then state.timeout:Cancel() end
     if C_Timer and C_Timer.NewTimer then
         state.timeout = C_Timer.NewTimer(15, function()
@@ -1901,17 +1954,18 @@ local function BuildSearchControls(window)
     activityDropdown:SetDefaultText("All activities")
     activityDropdown:SetupMenu(function(_, root)
         root:SetTag("MENU_FOREVER_QUICKJOIN_ACTIVITY")
-        root:CreateRadio("All activities",
-            function() return state.activityID == nil end,
-            function() SelectActivity(nil,nil) end)
+        root:CreateRadio("All activities (clear selection)",
+            function() return #state.selectedActivityIDs==0 end,
+            function() ClearActivitySelection() end)
+        root:CreateTitle("Select one or more activities")
         local choices=FilterActivities(state.activitySearchQuery)
         if #choices==0 then root:CreateTitle("No matching activities") end
         for _, item in ipairs(choices) do
-            local activityID, activityName = item.id, item.name
-            local caption=activityName..(item.levelLabel and (" ("..item.levelLabel..")") or "")
-            root:CreateRadio(caption,
-                function(id) return state.activityID == id end,
-                function(id) SelectActivity(id,activityName) end, activityID)
+            local activityID=item.id
+            local caption=item.name..(item.levelLabel and (" ("..item.levelLabel..")") or "")
+            root:CreateCheckbox(caption,
+                function(id) return state.selectedActivitySet[id]==true end,
+                function(id) ToggleActivity(id) end, activityID)
         end
     end)
 
@@ -1921,7 +1975,7 @@ local function BuildSearchControls(window)
     searchButton:SetText("Search")
     searchButton:SetScript("OnClick", SearchFromClick)
     -- A search input beside the dropdown filters its choices without a server
-    -- request. Enter selects the first match; clicking Activity displays all matches.
+    -- request. Enter toggles the first match; clicking Activity shows matches.
     activitySearchBox=CreateFrame("EditBox",nil,window,"InputBoxTemplate")
     activitySearchBox:SetSize(195,24)
     activitySearchBox:SetPoint("LEFT",searchButton,"RIGHT",14,0)
@@ -1936,7 +1990,8 @@ local function BuildSearchControls(window)
     activitySearchBox:SetScript("OnEnterPressed",function(self)
         local choices=FilterActivities(state.activitySearchQuery)
         if #choices>0 then
-            SelectActivity(choices[1].id,choices[1].name)
+            ToggleActivity(choices[1].id)
+            self:SetText("")
         else
             Status("No matching activities. Try another term or show all level ranges.")
         end
@@ -1949,7 +2004,7 @@ local function BuildSearchControls(window)
         if not GameTooltip then return end
         GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
         GameTooltip:AddLine("Filter activities and zones")
-        GameTooltip:AddLine("Type an activity or zone name, then open the Activity menu or press Enter to select the first match. Group descriptions cannot be searched.",1,1,1,true)
+        GameTooltip:AddLine("Type an activity or zone name, then open the Activity menu to check several dungeons. Enter toggles the first match. Click Search to request groups. Group descriptions cannot be searched.",1,1,1,true)
         GameTooltip:Show()
     end)
     activitySearchBox:SetScript("OnLeave",function()
@@ -2705,7 +2760,7 @@ events:SetScript("OnEvent", function(_, event, arg, detail)
                 end
             end)
         end
-        Print("v0.9.0 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
+        Print("v0.9.3 loaded. /qj, /qj list, or the minimap button opens QuickJoin.")
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if arg ~= addonName then return end
         local detailText = type(Readable(detail)) == "string" and detail or ""
