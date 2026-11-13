@@ -21,7 +21,7 @@ local underlayHidden, underlayIsHidden = {}, false
 local previewBackdrops = {}
 local parentBackdropSaved = nil
 local lastVisualState = nil
-local statusText, activeLabel, categoryText, selectedLabel, playstyleText
+local activeLabel, categoryText, selectedLabel, playstyleText
 local searchInput, friendlyCheck, createButton, updateButton, delistButton
 local activityDropdown, allLevelsCheck
 local categories, activities, selectedIDs, selectedSet = {}, {}, {}, {}
@@ -33,7 +33,6 @@ local isOpen, editorState, restorePending, restoreFailed = false, nil, false, fa
 local initialized, callCounter, lastAttempt = false, 0, nil
 local delistArmed = false
 local lastStyleWarningFor = nil
-local persistentStyleWarning = nil
 local exportPanel, exportEdit, exportScroll
 local db
 
@@ -75,11 +74,6 @@ local function Log(kind,message)
     local line="["..Clock().."] ["..kind.."] "..Clean(message,650)
     db.lines[#db.lines+1]=line
     while #db.lines>260 do table.remove(db.lines,1) end
-    if statusText then
-        local display=(persistentStyleWarning and kind=="VERIFY")
-            and ("STYLE WARNING: "..persistentStyleWarning) or (kind..": "..Clean(message,105))
-        statusText:SetText(display)
-    end
 end
 local function Notice(s)
     Log("NOTICE",s)
@@ -154,9 +148,10 @@ local function Snapshot(reason)
         and type(entry.generalPlaystyle)=="number" and entry.generalPlaystyle~=lastAttempt.expectedStyle
         and lastStyleWarningFor~=lastAttempt.id then
         lastStyleWarningFor=lastAttempt.id
-        persistentStyleWarning="Update #"..lastAttempt.id.." requested "..lastAttempt.expectedStyle
+        local warning="Update #"..lastAttempt.id.." requested "..lastAttempt.expectedStyle
             ..", active listing reports "..entry.generalPlaystyle.."; check Blizzard UI."
-        Log("STYLE WARNING",persistentStyleWarning)
+        Log("STYLE WARNING",warning)
+        Notice("Listing playstyle differs after updating. Check the listing in Blizzard's UI.")
     end
     if creator and creator:IsShown() then
         if createButton then if active then createButton:Disable() else createButton:Enable() end end
@@ -533,7 +528,6 @@ local function ConfirmOperation(name,requireActive)
 end
 local function BeginAttempt(op,ids)
     delistArmed=false
-    persistentStyleWarning=nil
     if delistButton then delistButton:SetText("Delist") end
     callCounter=callCounter+1
     lastAttempt={kind=op,ids=ChosenCopy(),id=callCounter,
@@ -768,8 +762,6 @@ local function OpenCreator()
     isOpen=true
     delistArmed=false
     if delistButton then delistButton:SetText("Delist") end
-    persistentStyleWarning=nil
-    if statusText then statusText:SetText("Type in Blizzard's embedded description box; each listing action requires your click.") end
     RefreshCatalog(false)
     selectedIDs={};selectedSet={}
     RenderActivities()
@@ -927,8 +919,6 @@ local function MakeCreator()
     -- Critically, the nested EditBox also needs its width updated; otherwise
     -- it keeps its old width from UIPanelInputScrollFrame_OnLoad and visually
     -- protrudes past the slot even though the ScrollFrame itself is docked.
-    Label(creator,"The description is protected; QuickJoin never reads, pastes,",431,413,345,17,"GameFontHighlightSmall")
-    Label(creator,"or programmatically edits its contents.",431,431,345,17,"GameFontHighlightSmall")
     Button(creator,"Refit Editor",431,456,153,28,function()
         if not editorState then DockEditor()
         else
@@ -942,12 +932,6 @@ local function MakeCreator()
     createButton=Button(creator,"Create",432,531,109,32,CreateOnClick)
     updateButton=Button(creator,"Update",548,531,109,32,UpdateOnClick)
     delistButton=Button(creator,"Delist",666,531,120,32,DelistOnClick)
-    Label(creator,"Update checks playstyle after posting; Delist needs two clicks.",431,570,355,32,"GameFontHighlightSmall")
-    Label(creator,"Clear old description manually before a new listing.",431,603,355,25,"GameFontHighlightSmall")
-
-    statusText=Label(creator,"Ready. Select activities and type a description.",18,634,770,33,"GameFontHighlightSmall")
-    Button(creator,"Export Listing Log",20,671,170,28,ExportLog)
-    Button(creator,"Verify Listing",201,671,142,28,function()Snapshot("manual verify")end)
     creator:Hide()
 end
 
@@ -1416,7 +1400,7 @@ watcher:SetScript("OnEvent",function(self,event,...)
         db=type(ForeverQuickJoinListingDB)=="table" and ForeverQuickJoinListingDB or {}
         ForeverQuickJoinListingDB=db
         showAllLevels=db.showAllLevelRanges==true
-        Log("LOGIN","integrated listing creator enabled; version 0.9.0")
+        Log("LOGIN","integrated listing creator enabled; version 0.9.1")
         Install()
     elseif event=="PLAYER_REGEN_ENABLED" then
         if restorePending then RestoreEditor("combat ended") end

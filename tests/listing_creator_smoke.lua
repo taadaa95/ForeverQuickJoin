@@ -9,7 +9,7 @@ local function has(where,what)
 end
 has(toc,"\nForeverQuickJoin_Listing.lua\n")
 has(toc,"ForeverQuickJoinListingDB")
-has(toc,"## Version: 0.9.0")
+has(toc,"## Version: 0.9.1")
 assert(not main:find("Click a row to view members",1,true),
     "obsolete helper text must be removed from Finder source")
 assert(not main:find("AttachResizeGrip(",1,true),"resize grip must be removed")
@@ -59,4 +59,30 @@ assert(not listing:find("ForeverQuickJoinHostPreviewDB",1,true),
 assert(not listing:find("MANAGE LISTING  [TEST]",1,true),
     "preview title should not be in release")
 has(host,'Label(panel,"APPLICANT INBOX"')
+
+-- Production UI must not display test-lab diagnostics or tutorial strings.
+for _,old in ipairs({
+    '"Export Listing Log"',
+    '"Verify Listing"',
+    '"The description is protected; QuickJoin never reads, pastes,"',
+    '"or programmatically edits its contents."',
+    '"Update checks playstyle after posting; Delist needs two clicks."',
+    '"Clear old description manually before a new listing."',
+    'statusText=Label(',
+    'statusText:SetText(',
+}) do
+    assert(not listing:find(old,1,true),"obsolete creator UI text/control: "..old)
+end
+assert(not main:find("Whisper: {level} {class} {role} {activity} {location} {party} {partycount}",1,true),
+    "whisper token-helper label must be removed")
+assert(not main:find("No groups match your filters",1,true),
+    "empty-filter results hint must not appear")
+-- Keep core functionality and optional slash-only diagnostics available.
+has(listing,'if arg=="export" then ExportLog()')
+has(listing,'elseif arg=="verify" then Snapshot("slash command")')
+has(listing,'local function CreateOnClick()')
+has(listing,'local function UpdateOnClick()')
+has(listing,'local function DelistOnClick()')
+has(main,'messageBox = CreateFrame("EditBox"')
+has(main,'previewLabel = MakeLabel(')
 print("Integrated listing creator tests passed.")
