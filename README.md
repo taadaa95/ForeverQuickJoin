@@ -23,7 +23,7 @@ Browse available groups, narrow down your search, and contact group leaders with
 Spend less time searching and more time playing.
 
 <img width="1409" height="1312" alt="screenshot-2026-11-13_02-16-39" src="https://github.com/user-attachments/assets/d52189a0-7b24-4c26-bfe2-8821adfca563" />
-<img width="1418" height="1318" alt="screenshot-2026-11-13_02-20-29" src="https://github.com/user-attachments/assets/827e50dd-dde1-4875-af44-d9573f3f80df" />
+<img width="1422" height="1321" alt="screenshot-2026-11-13_02-37-03" src="https://github.com/user-attachments/assets/4039afd1-bec5-48a8-aac5-4c80a751d575" />
 <img width="608" height="1130" alt="screenshot-2026-11-13_02-17-23" src="https://github.com/user-attachments/assets/a4ea8985-d48a-462b-af1e-dfa88d5cadcd" />
 <img width="1420" height="1323" alt="screenshot-2026-11-13_02-21-36" src="https://github.com/user-attachments/assets/b2c32efb-8f31-4a26-a905-6cb37dd98f4d" />
 <img width="1307" height="1099" alt="screenshot-2026-11-13_02-34-48" src="https://github.com/user-attachments/assets/a4d4efab-4902-457d-9b3e-c556fa2e9611" />
