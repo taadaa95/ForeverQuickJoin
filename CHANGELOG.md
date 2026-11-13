@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.5 — 2026-11-13
+
+- Expanded Group Listings now offer a native right-click context menu on named group members, with **Prepare /who** and **Prepare Whisper** options.
+- **Prepare /who** retains the existing name-targeted WHO command and location lookup workflow; **Prepare Whisper** opens the chat input with `/w PlayerName ` ready for a message.
+- Neither option sends anything automatically. The player must press Enter to submit, and unavailable/hidden player names cannot be targeted.
+- Updated member tooltips and help text to describe the two options. README unchanged.
+
 ## 0.9.4 — 2026-11-13
 
 - Integrated **LFG Chat** into Forever QuickJoin's Find Groups panel alongside **Group Listings**. Posts are collected from incoming public channels (including LookingForGroup, General, and Trade), Say, and Yell, with deduplication and a ten-minute expiration.

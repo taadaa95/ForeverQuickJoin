@@ -2,7 +2,7 @@
 ## Title: Forever QuickJoin
 ## Notes: Find groups, create and manage multi-activity listings, and handle applicants. /qj
 ## Category: Group Finder
-## Version: 0.9.4
+## Version: 0.9.5
 ## SavedVariablesPerCharacter: ForeverQuickJoinDB, ForeverQuickJoinListingDB
 
 ForeverQuickJoin.lua
