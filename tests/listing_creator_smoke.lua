@@ -9,7 +9,7 @@ local function has(where,what)
 end
 has(toc,"\nForeverQuickJoin_Listing.lua\n")
 has(toc,"ForeverQuickJoinListingDB")
-has(toc,"## Version: 0.9.3")
+assert(toc:match("## Version: %d+%.%d+%.%d+"), "Missing semantic addon version")
 assert(not main:find("Click a row to view members",1,true),
     "obsolete helper text must be removed from Finder source")
 assert(not main:find("AttachResizeGrip(",1,true),"resize grip must be removed")
