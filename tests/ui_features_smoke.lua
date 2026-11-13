@@ -1,6 +1,16 @@
 -- Lua 5.1 regression checks for activity filtering, alerts and fixed-size window.
 local main=assert(io.open("ForeverQuickJoin.lua","rb")):read("*a")
 local apps=assert(io.open("ForeverQuickJoin_Applications.lua","rb")):read("*a")
+local party=assert(io.open("ForeverQuickJoin_Party.lua","rb")):read("*a")
+-- Role manager shows the effective (potentially manually overridden) role.
+assert(party:find('row.info:SetText(hint.."Role: "..(ROLE_NAME[m.role] or "Unknown").."  |  "..m.source)',1,true),
+    "role manager must show effective role")
+assert(party:find('source = "Auto-assigned"',1,true),
+    "automatically detected roles need the new display label")
+assert(party:find('source = "QuickJoin confirmed"',1,true),
+    "manual role confirmations should retain their distinct source")
+assert(not party:find('"WoW-assigned"',1,true),"outdated assignment label removed")
+assert(not party:find('row.info:SetText(hint.."WoW: "',1,true),"outdated role label removed")
 local function Piece(source,first,last)
     local start=assert(source:find("local function "..first.."(",1,true),"Missing "..first)
     local finish=assert(source:find("\nlocal function "..last.."(",start,true),
