@@ -860,10 +860,17 @@ end
 
 -- Right-click menu for public LFG Chat sender names, matching Group Listings.
 -- Name validation prevents using chat text as slash commands or Blizzard markup.
+-- Every WoW Forever character has a unique First Last name.
+-- Validate both words as one identity; do not reject the separating space.
+-- Reject control characters, extra whitespace, and unsafe command/markup bytes.
 local function ContextPlayerName(value)
     value=Readable(value)
-    if type(value)~="string" or value=="" or #value>96 then return nil end
-    if value:find('[|"/%c%s]') then return nil end
+    if type(value)~="string" or #value<3 or #value>96 then return nil end
+    if value:find("|",1,true) or value:find("/",1,true)
+        or value:find('"',1,true) or value:find("\\",1,true)
+        or value:find("[%c]") then return nil end
+    local first,last=value:match("^([^%s]+) ([^%s]+)$")
+    if not first or not last then return nil end
     return value
 end
 
@@ -879,11 +886,25 @@ local function PrepareSenderChat(command)
     return false
 end
 
+-- Native chat whisper targeting preserves "First Last" as one recipient.
+-- If unavailable on this client, Forever's /cw targets full names.
+-- All branches only open a chat input; they never send the message.
+local function PrepareSenderWhisper(name)
+    if ChatFrameUtil and type(ChatFrameUtil.SendTell)=="function" then
+        ChatFrameUtil.SendTell(name)
+        return true
+    elseif type(ChatFrame_SendTell)=="function" then
+        ChatFrame_SendTell(name)
+        return true
+    end
+    return PrepareSenderChat("/cw "..name.." ")
+end
+
 local function OpenSenderContextMenu(owner,entry)
     if type(entry)~="table" or entry.synthetic then return end
     local name=ContextPlayerName(entry.sender)
     if not name then
-        Print("This LFG Chat post does not expose a usable player name.")
+        Print("This post does not expose a valid First Last character name.")
         return
     end
     if not MenuUtil or type(MenuUtil.CreateContextMenu)~="function" then
@@ -903,7 +924,7 @@ local function OpenSenderContextMenu(owner,entry)
             end
         end)
         menu:CreateButton("Prepare Whisper",function()
-            if PrepareSenderChat("/w "..name.." ") then
+            if PrepareSenderWhisper(name) then
                 Print("Whisper prepared for "..name..". Type a message and press Enter.")
             end
         end)
@@ -929,7 +950,7 @@ local function InstallSenderHitbox(row)
             or not GameTooltip then return end
         GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
         GameTooltip:AddLine("Right-click: /who or whisper")
-        GameTooltip:AddLine("Actions only prepare chat; press Enter to send.",.8,.8,.8)
+        GameTooltip:AddLine("First Last targeting; commands are not sent automatically.",.8,.8,.8)
         GameTooltip:Show()
     end)
     hitbox:SetScript("OnLeave",function()
