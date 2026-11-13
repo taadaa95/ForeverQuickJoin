@@ -41,8 +41,8 @@ env.state.activityID=2
 assert(result({activityIDs={1,2}})=="Lv 32-42","selected multi-activity dungeon wins")
 assert(source:find("levelLabel=SuggestedDungeonLevelLabel(info)",1,true),
     "dropdown source must use native suggested dungeon range")
-assert(source:find('root:CreateRadio(caption,',1,true),
-    "menu entries must include level ranges")
+assert(source:find('root:CreateCheckbox(caption,',1,true),
+    "multi-select menu entries must include suggested level ranges")
 assert(source:find('activityDropdown:OverrideText(caption)',1,true),
     "selected dropdown should display its level range")
 assert(source:find('row.dungeonLevelLabel=ResultDungeonLevelLabel(info)',1,true),
