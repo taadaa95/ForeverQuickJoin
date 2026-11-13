@@ -1,79 +1,86 @@
 # Forever QuickJoin
 
-**Forever QuickJoin** is an in-game group finder and recruitment assistant for **World of Warcraft: Forever**. It helps you find a group, send one-click whispers, and manage people asking to join your group.
+**Find groups. Create listings. Manage applicants. All in one window.**
 
-## Features
+ForeverQuickJoin is an all-in-one group finder and recruitment addon built specifically for **World of Warcraft: Forever**.
 
-### Tab visibility and transparency
+Finding a dungeon group shouldn't mean repeatedly opening different menus, typing the same whispers, or manually keeping track of everyone you've contacted.
 
-**Find Groups**, **List Group**, and **Applications** are separate views. With transparency enabled in either theme, only the active tab's controls remain visible; hidden Find Groups content will not bleed through the translucent List Group or Applications background. The party composition summary remains available in Find Groups and List Group, but is hidden on Applications.
+ForeverQuickJoin brings group discovery, recruitment, listing creation, and applicant management into one convenient interface—making it easier to find a group or put one together yourself.
+
+## Find Groups
+
+Browse available groups, narrow down your search, and contact group leaders without the usual hassle.
+
+- **Advanced group filtering:** Search by category, activity, playstyle, group size, available roles, and more.
+- **Dungeon level ranges:** View suggested dungeon levels and choose whether to display activities outside your level range.
+- **Group composition:** See available party information, including roles, classes, and levels when exposed by the game.
+- **One-click whispers:** Contact group leaders using a customizable message template that automatically fills in your class, level, role, activity, and location.
+- **Whisper tracking:** See which groups you've already contacted, helping you avoid sending duplicate requests.
+- **My Applications:** Keep track of contacted groups and incoming replies in a dedicated conversation interface.
+- **Detailed listings:** View group descriptions, selected activities, playstyles, and party information.
+
+Spend less time searching and more time playing.
+
+<img width="1409" height="1312" alt="screenshot-2026-11-13_02-16-39" src="https://github.com/user-attachments/assets/d52189a0-7b24-4c26-bfe2-8821adfca563" />
+<img width="1418" height="1318" alt="screenshot-2026-11-13_02-20-29" src="https://github.com/user-attachments/assets/827e50dd-dde1-4875-af44-d9573f3f80df" />
+<img width="608" height="1130" alt="screenshot-2026-11-13_02-17-23" src="https://github.com/user-attachments/assets/a4ea8985-d48a-462b-af1e-dfa88d5cadcd" />
+<img width="1420" height="1323" alt="screenshot-2026-11-13_02-21-36" src="https://github.com/user-attachments/assets/b2c32efb-8f31-4a26-a905-6cb37dd98f4d" />
+<img width="1307" height="1099" alt="screenshot-2026-11-13_02-34-48" src="https://github.com/user-attachments/assets/a4d4efab-4902-457d-9b3e-c556fa2e9611" />
 
 
-### Find Groups
+## Create & Manage Listings
 
-- Search Blizzard's Group Finder directly by category and activity.
-- Click **Whisper to Join** to contact a group leader using your saved message.
-- See each group's activity, playstyle, size, and Blizzard tank/healer/DPS icons.
-- **Friends and guildmates:** Listings containing people you know display colored `F:` (character friends), `B:` (Battle.net friends), and `G:` (guildmates) counts beneath the leader's name. Hover over a listing for the full explanations. Counts are shown only when the client provides them; friend categories may overlap.
-- Expand a group to inspect available member names, classes, levels, roles, specializations, and areas. Right-click a named member to prepare a manual `/who` query when their area is unknown.
+Hosting a group is just as straightforward.
 
-- Contacted listings display a distinct **green Sent** indicator. When the contacted leader replies, it becomes **Reply** and the Applications tab shows the unread conversation. Sent groups remain pinned at the top even after searching other activities or changing filters.
+Forget switching back and forth between your addon and Blizzard's Group Finder. **ForeverQuickJoin includes its own integrated listing creator.**
 
+- **Create listings directly:** Publish groups from inside QuickJoin.
+- **Multiple activities:** Advertise several dungeons in a single listing.
+- **Group descriptions:** Write descriptions directly in QuickJoin using Blizzard's original protected text editor.
+- **Playstyle selection:** Specify the type of group you're organizing.
+- **Update listings:** Change activities and listing settings as your group's needs evolve.
+- **Delist:** Remove your listing directly from QuickJoin.
+- **Applicant management:** Review incoming whispers, manage potential applicants, assign roles, and access recruitment actions from a dedicated inbox.
 
-<img width="1415" height="1314" alt="screenshot-2026-11-09_18-27-24" src="https://github.com/user-attachments/assets/d91bea99-f5a0-410a-b0b9-521f0c5c4663" />
+Whether you're forming a dungeon group or looking for additional players, everything is accessible from the same interface.
 
-<img width="604" height="1129" alt="screenshot-2026-11-09_18-27-38" src="https://github.com/user-attachments/assets/861b95d2-6055-4cc0-840a-b3d96a57a917" />
+## Party Role Manager
 
-<img width="1418" height="1321" alt="screenshot-2026-11-09_18-27-51" src="https://github.com/user-attachments/assets/97a4db1f-8468-4dbc-b24d-5110ca79b398" />
+Keep track of your group's composition as it changes.
 
-<img width="612" height="1131" alt="screenshot-2026-11-09_18-27-57" src="https://github.com/user-attachments/assets/9cf5f338-363a-427e-8687-b717ba239432" />
+ForeverQuickJoin automatically detects available party information and provides a permanent role summary showing your current Tanks, Healers, and DPS.
 
+When a player's role cannot be determined reliably, you can assign it manually.
 
-### Group descriptions and Quests & Zones
+This makes it easier to identify which roles your group still needs before recruiting additional members.
 
-QuickJoin now displays group descriptions as a one-line preview beneath results, the complete wrapped description when expanding a listing, and full text in the mouseover tooltip. A note icon indicates that a listing has a description. WoW's protected Kstring tokens are passed directly to its UI renderer, rather than being escaped or truncated.
+## Customization & Quality of Life
 
-The activity dropdown search supports activity and zone names, including alternate names exposed by the client. It filters locally and never initiates a background Group Finder search. **Descriptions containing specific quest or elite-mob names cannot reliably be searched by addons** because WoW masks their contents.
+- **Two interface themes:** Choose between Forever and Modern.
+- **Optional transparency:** Adjust the appearance to suit your UI.
+- **Customizable keybind:** Open or close QuickJoin with **Ctrl + I** by default, or assign your own shortcut through WoW's Keybindings settings.
+- **Minimap button:** Quickly open the addon at any time.
+- **Custom whisper templates:** Personalize recruitment messages using dynamic placeholders.
+- **Searchable activities:** Find dungeons and other activities quickly without scrolling through long lists.
+- **Persistent preferences:** Keep your interface and filtering preferences between sessions.
 
-### My Applications & reply tracking
+## Getting Started
 
-The **Applications** tab shows the groups you've contacted through QuickJoin and your outgoing messages. Replies from a matching leader are attached to that conversation, and an unread counter appears on the Applications tab. Open a conversation to mark its replies read, or click **Reply to leader** to prepare a whisper in Blizzard chat (press Enter yourself to send). Follow-up whispers to the same active listing stay in the same thread.
+Type **`/qj`** or press **Ctrl + I** to open ForeverQuickJoin.
 
-### List Group / Applicant Inbox
+Select **Find Groups** to discover available listings and contact leaders, or **Create Listing** to publish your own group and manage applicants.
 
-Use **Open Blizzard Listing** in the List Group header to create and manage your listing in Blizzard's protected UI. QuickJoin automatically collects incoming whispers while loaded in a separate, session-only inbox, grouped by self-reported Tank, Healer, DPS, or Unknown role. Select an applicant to see their conversation and known class/level details. Reply, invite, decline, dismiss, or prepare a manual `/who` lookup.
+ForeverQuickJoin uses WoW Forever's Group Finder APIs. Player-initiated actions remain under your control; the addon does not automatically send whispers or join groups on your behalf.
 
-## Searchable activities
+## Free & Open Source
 
-Type in **Activities / zones** beside the Activity menu to narrow dropdown options by activity or zone name. Open the Activity dropdown to select one of the matches, or press Enter to choose the first match. The filter runs locally on the available activities; it does **not** initiate a server search. Use **Show all level ranges** if the activity you want is outside your suggested level range.
+ForeverQuickJoin is completely free and actively developed.
 
-## Reply notifications
+Suggestions, feedback, and bug reports are always welcome.
 
-In **Applications**, use **Reply notifications** to toggle sound and on-screen/chat alerts for replies from contacted leaders. Alerts are enabled by default, but not played when you are already viewing that conversation. The setting is saved per character.
+**GitHub:** https://github.com/taadaa95/ForeverQuickJoin
 
-## Resize the window
+**Optional donations:** https://ko-fi.com/taadaa95
 
-Drag the bottom-right corner grip to resize QuickJoin **proportionally** (70–145% scale); right-click the grip to reset it to 100%. The setting is saved per character. Proportional resizing keeps all tabs and the advanced filters aligned.
-
-## Interface themes
-
-Select **Forever** or **Modern** using the **Theme** controls at the top of either QuickJoin tab.
-
-## Whisper messages
-
-The solo default is:
-
-`Level {level} {class} {role} LFG {activity}, Current location: {location}, inv please!`
-
-With a party, the default also adds `Party: {party}`. `{party}` includes **other** members' names, levels, classes, and QuickJoin-confirmed roles. Supported placeholders: `{level}`, `{class}`, `{role}`, `{activity}`, `{location}`, `{name}`, `{party}`, and `{partycount}`. Click **Reload Whisper Template** to restore the appropriate default. Custom messages are preserved until you reset them.
-
-## Slash commands
-
- `/qj` Toggle QuickJoin 
-
-## Important limitations
-
-- Blizzard controls search, listing creation, whispers, invites, and who-queries. Protected actions cannot be run automatically in the background; listing creation occurs in Blizzard's own window.
-- Player details may be withheld by the client. Missing specs, roles, or locations are shown as unknown; `/who` requires you to submit the prepared query yourself.
-- Party role confirmations are **not talent/spec detection**. Verify the roles with your party; QuickJoin does not secretly inspect another player's build or alter their assigned group role.
-- The applicant inbox, applications/replies, party role overrides, and **Sent tracking** are session-only. Sent markers survive searches and filter changes, but are cleared on logout/reload. When a group is no longer included in the current server search, its cached Sent row is **not proof it is still available**; the client must explicitly confirm delisting for automatic removal. Your filters, theme, minimap position, and whisper template are saved per character.
+If you find ForeverQuickJoin useful, consider leaving a comment or sharing it with other players. Your feedback helps shape future updates.
