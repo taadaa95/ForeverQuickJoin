@@ -159,6 +159,7 @@ local function RecordIncoming(message, name, guid)
     end
     PlayerInfo(entry, Readable(guid))
     AddLine(entry, "in", message)
+    inboxPage = 1 -- always surface a new incoming whisper at the top
     if Host.Redraw then Host.Redraw() end
 end
 local function RecordOutgoing(message, name)
@@ -174,9 +175,11 @@ local function Sorted()
     local out = {}
     for _,entry in ipairs(applicants) do out[#out+1] = entry end
     table.sort(out, function(a,b)
+        -- A recent message always outranks role grouping in the live inbox.
+        if a.updatedAt ~= b.updatedAt then return a.updatedAt > b.updatedAt end
+        if (a.unread or 0) ~= (b.unread or 0) then return (a.unread or 0) > (b.unread or 0) end
         local ra, rb = ROLE_ORDER[a.role] or 4, ROLE_ORDER[b.role] or 4
         if ra ~= rb then return ra < rb end
-        if a.updatedAt ~= b.updatedAt then return a.updatedAt > b.updatedAt end
         return a.name < b.name
     end)
     return out

@@ -6,6 +6,7 @@ ForeverQuickJoinApplications = Apps
 local MAX_ENTRIES, MAX_MESSAGES, PAGE_SIZE = 100, 40, 8
 local entries, byRecord = {}, setmetatable({}, {__mode="k"})
 local selected, currentPage, nextSerial = nil, 1, 0
+local nextActivitySerial = 0 -- deterministic recency even for messages in the same clock tick
 local window, panel, listTitle, detailsTitle, detailsInfo, conversation, pageLabel
 local listRows, previousButton, nextButton, replyButton = {}, nil, nil, nil
 local notificationsCheck
@@ -89,10 +90,18 @@ local function UpdateTab()
     end
 end
 local function AddMessage(entry,direction,message)
+    nextActivitySerial=nextActivitySerial+1
+    entry.lastActivitySerial=nextActivitySerial
     entry.messages[#entry.messages+1]={direction=direction,message=message,at=Clock()}
     if #entry.messages>MAX_MESSAGES then table.remove(entry.messages,1) end
 end
 local function Refresh()
+    -- New messages move their conversation to the top without losing selection.
+    table.sort(entries,function(a,b)
+        local aa,bb=a.lastActivitySerial or 0,b.lastActivitySerial or 0
+        if aa~=bb then return aa>bb end
+        return (a.serial or 0)>(b.serial or 0)
+    end)
     UpdateTab()
     if not panel or not panel:IsShown() then return end
     listTitle:SetText(("CONTACTED GROUPS (%d) · Unread replies: %d"):format(#entries,CountUnread()))
@@ -261,6 +270,7 @@ local function Receive(message,sender)
     local match=FindEntry(sender)
     if not match then return end
     AddMessage(match,"in",message)
+    currentPage=1 -- ensure a new incoming reply is visible immediately
     match.replies=match.replies+1
     if selected==match and panel and panel:IsShown() then
         match.unread=0

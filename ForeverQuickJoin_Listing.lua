@@ -1305,7 +1305,8 @@ local function Install()
     topHostingTab:SetWidth(136)
     tabIndicators.find=MakeTabIndicator(window,topFindTab)
     tabIndicators.listing=MakeTabIndicator(window,topHostingTab)
-    InstallFinderDropdown()
+    -- The redundant top-level Playstyle dropdown is intentionally retired.
+    -- Playstyle exclusions are managed only in Advanced Filters.
     InstallApplicationsBackButton()
     InstallRoleManagerOpacity()
     SelectMainTab("find")
