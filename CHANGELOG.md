@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.2 — 2026-11-13
+
+- Party Role Manager now displays **Role: DPS** (or Tank/Healer/Unknown) for the effective role rather than **WoW: DPS**, which could disagree with a manually confirmed override.
+- Automatically detected assignments now display **Auto-assigned** rather than **WoW-assigned**.
+- Explicitly selected role overrides continue to display **QuickJoin confirmed**, and existing role detection and assignment behavior is unchanged.
+
+
 ## 0.9.1 — 2026-11-13
 
 - Cleaned the Create Listing view by removing the **Export Listing Log** and **Verify Listing** buttons and the on-screen verification/diagnostic status line. Maintenance diagnostics remain available through `/qjlisting export` and `/qjlisting verify`.

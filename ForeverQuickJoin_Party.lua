@@ -73,7 +73,7 @@ local function MemberFor(unit, isSelf)
         reason = review and "WoW role changed — confirm again" or nil
     else
         effective = assigned
-        source = "WoW-assigned"
+        source = "Auto-assigned"
         if effective=="UNKNOWN" then
             -- Never assign a party member's role solely from their class.
             -- Forever can introduce custom role-capable specializations.
@@ -248,7 +248,7 @@ local function RefreshView()
                 row.roleIcon:Hide()
             end
             local hint= m.reason and (m.reason.."  |  ") or ""
-            row.info:SetText(hint.."WoW: "..(ROLE_NAME[m.assigned] or "Unknown").."  |  "..m.source)
+            row.info:SetText(hint.."Role: "..(ROLE_NAME[m.role] or "Unknown").."  |  "..m.source)
             row.info:SetTextColor(m.review and 1 or .7,m.review and .75 or .88,m.review and .35 or .76)
             for _,role in ipairs(ROLE_ORDER) do
                 local selected=m.role==role
