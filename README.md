@@ -13,6 +13,12 @@ Forever QuickJoin is an enhanced group finder addon built specifically for **WoW
 - **Group Management** — Create listings, manage applicants, and keep recruitment conversations organized.
 - **Blizzard-Inspired Interface** — Familiar visuals, multiple themes, and customizable whisper templates.
 
+  How to Open
+Type /qj in chat.
+Press Ctrl + I (default keybind).
+
+You can change the shortcut anytime in Blizzard's Key Bindings settings under Other → Toggle Forever QuickJoin.
+
 **Less searching. Less typing. More playing.**
 
 <img width="1421" height="1323" alt="image" src="https://github.com/user-attachments/assets/69c7329f-3411-4b06-bddf-ba446398055b" />
