@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.1 — 2026-11-13
+
+- Cleaned the Create Listing view by removing the **Export Listing Log** and **Verify Listing** buttons and the on-screen verification/diagnostic status line. Maintenance diagnostics remain available through `/qjlisting export` and `/qjlisting verify`.
+- Removed the extra instructions below the description editor and listing action buttons.
+- Removed the Whisper template placeholder-token helper label in Find Groups; the editable message field and live preview remain.
+- Removed the "No groups match your filters" status text when a cached search has no matches. Other search and error feedback remains intact.
+- Listing API operations, protected editor handling, two-click Delist confirmation, navigation, themes and character keybindings are unchanged.
+
+
 ## 0.9.0 — 2026-11-13
 
 - Integrated **Create Listing** directly into Forever QuickJoin; no companion Host Preview addon required. Remove the preview before installing.

@@ -1139,7 +1139,7 @@ local function RebuildVisibleResults(resetPage)
     if state.totalInCache == 0 then
         Status("No cached listings yet. Select an activity and click Search.")
     elseif #state.results == 0 then
-        Status(("No groups match your filters (%d cached). Change filters or Clear."):format(state.totalInCache))
+        Status("")
     else
         Status(("Showing %d of %d cached groups. Search updates listings; filters are local.")
             :format(#state.results, state.totalInCache))
@@ -2353,8 +2353,6 @@ local function CreateWindow()
     pageLabel = MakeLabel(findContent, "Page 1 / 1", "GameFontHighlightSmall", 277, -567, 300, 20)
     pageLabel:SetJustifyH("CENTER")
 
-    MakeLabel(findContent, "Whisper: {level} {class} {role} {activity} {location} {party} {partycount}",
-        "GameFontNormalSmall", 26, -602, 600, 18)
     templateResetButton = CreateFrame("Button", nil, findContent, "UIPanelButtonTemplate")
     templateResetButton:SetSize(178, 23)
     templateResetButton:SetPoint("TOPRIGHT", window, "TOPRIGHT", -26, -598)
