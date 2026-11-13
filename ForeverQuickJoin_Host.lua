@@ -446,7 +446,7 @@ function Host.Attach(parent)
         edgeFile="Interface\\DialogFrame\\UI-DialogBox-Border",tile=true,tileSize=32,
         edgeSize=20,insets={left=0,right=0,top=0,bottom=0}})
     panel:SetBackdropColor(.035,.045,.065,1)
-    Label(panel,"LIST GROUP & APPLICANT INBOX",17,10,400,26,"GameFontNormalLarge")
+    Label(panel,"APPLICANT INBOX",17,10,400,26,"GameFontNormalLarge")
     -- Creation, editing and removal happen in Blizzard's own secure Listing tab.
     -- QuickJoin keeps its full applicant inbox and handles whispers/invites.
     -- Put the listing handoff in the title row instead of directly above the
@@ -454,7 +454,7 @@ function Host.Attach(parent)
     -- inbox or clipping it on short screens.
     listingButton=Button(panel,"Open Blizzard Listing",580,10,211,27,OpenNativeListing)
     listingStatusLabel=Label(panel,"No active listing",371,14,202,24,"GameFontHighlightSmall")
-    statusLabel=Label(panel,"Create, edit or delist in Blizzard; manage whispers and applicants here.",17,155,780,24)
+    statusLabel=Label(panel,"Manage incoming whispers and applicants here.",17,155,780,24)
     inboxLabel=Label(panel,"APPLICANTS (0)",17,201,770,24,"GameFontNormal")
     -- Opaque, visible left queue / right one-applicant conversation.
     local left=CreateFrame("Frame",nil,panel,"BackdropTemplate")
