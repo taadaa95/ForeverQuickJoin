@@ -38,6 +38,14 @@ assert(#filter("duskwood")==1 and filter("duskwood")[1].id==5,
 assert(main:find("window:SetSize(840, 785)",1,true),"standard window dimensions")
 assert(main:find("window:SetScale(1)",1,true),"fixed 100% window scale")
 assert(main:find("local choices=FilterActivities(state.activitySearchQuery)",1,true))
+assert(main:find("root:CreateCheckbox(caption,",1,true),
+    "Find Groups activity menu must support multiple selections")
+assert(main:find("function(id) ToggleActivity(id) end, activityID)",1,true),
+    "each activity checkbox must toggle its ID")
+assert(main:find('function() ClearActivitySelection() end)',1,true),
+    "clear selection must restore all-activities scope")
+assert(main:find('C_LFGList.Search(state.categoryID, 0, 0, nil, false, nil, activities)',1,true),
+    "one user click passes the full activity set to native Search")
 assert(main:find("activitySearchBox:SetScript(\"OnEnterPressed\"",1,true))
 assert(not main:find("AttachResizeGrip(",1,true),"resize grip should be removed")
 assert(not main:find("ClampWindowScale(",1,true),"resize scale helper should be removed")
