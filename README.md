@@ -84,3 +84,7 @@ Suggestions, feedback, and bug reports are always welcome.
 **Optional donations:** https://ko-fi.com/taadaa95
 
 If you find ForeverQuickJoin useful, consider leaving a comment or sharing it with other players. Your feedback helps shape future updates.
+
+## License
+
+Forever QuickJoin is licensed under the **GNU General Public License v3.0 (GPL-3.0-only)**. See the [LICENSE](LICENSE) file for the complete terms.
