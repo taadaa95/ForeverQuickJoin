@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.7 — 2026-11-13
+
+- Fixed the LFG Chat sender context menu rejecting valid two-part **First Last** WoW Forever character names such as **Time Sync**.
+- **Prepare Whisper** now prefers Blizzard's native whisper-target API to keep the full name together, with a `/cw First Last` fallback on clients without the native function.
+- **Prepare /who** continues to populate a targeted full-name query without submitting it. Both menu actions remain entirely player-initiated.
+- Names are validated to reject malformed input and command/markup characters. One-Click Whisper and Invite buttons are unaffected.
+- Integrates the previously tested **ForeverQuickJoinNameFix** local companion into the main addon; remove the companion folder when upgrading. README unchanged.
+
 ## 0.9.6 — 2026-11-13
 
 - Added a right-click menu to sender names in **LFG Chat** with **Prepare /who** and **Prepare Whisper**, matching expanded Group Listings. Both actions only populate Blizzard's chat edit box, and neither sends automatically.

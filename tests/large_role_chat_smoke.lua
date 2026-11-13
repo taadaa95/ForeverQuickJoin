@@ -9,7 +9,7 @@ end
 local chat=Read("ForeverQuickJoin_Chat.lua")
 local party=Read("ForeverQuickJoin_Party.lua")
 local toc=Read("ForeverQuickJoin.toc")
-assert(toc:find("## Version: 0.9.6",1,true))
+assert(toc:match("## Version: %d+%.%d+%.%d+"), "Missing semantic addon version")
 assert(not toc:find("ForeverQuickJoin096Test",1,true))
 local function Extract(source,first,last,returnCode)
     local a=assert(source:find(first,1,true),"Missing "..first)
@@ -17,14 +17,22 @@ local function Extract(source,first,last,returnCode)
     return assert(loadstring(source:sub(a,b-1).."\n"..returnCode))()
 end
 
-local ValidName,PrepareChat,OpenSenderMenu,Hitbox =
+local ValidName,PrepareChat,PrepareWhisper,OpenSenderMenu,Hitbox =
     Extract(chat,"local function ContextPlayerName(","local function InstallChatPanel(window)",
-        "return ContextPlayerName,PrepareSenderChat,OpenSenderContextMenu,InstallSenderHitbox")
+        "return ContextPlayerName,PrepareSenderChat,PrepareSenderWhisper,OpenSenderContextMenu,InstallSenderHitbox")
 Readable=function(v) return v end
-assert(ValidName("Player-Realm")=="Player-Realm")
-assert(not ValidName('Bad"/who') and not ValidName("Bad Name"))
-local opened={}
-ChatFrameUtil={OpenChat=function(cmd) opened[#opened+1]=cmd end}
+assert(ValidName("Time Sync")=="Time Sync")
+assert(ValidName("Élodie Flame")=="Élodie Flame")
+for _,bad in ipairs({"Single", "First  Last", "Three Word Name",
+    'Bad"/who', "Player-Realm", " Bad Name", "Bad Name ",
+    "Bad/ Player", "Bad| Name", "Bad\\ Name", "Bad\nName"}) do
+    assert(not ValidName(bad), "Malformed sender accepted: "..bad)
+end
+local opened,tells={},{}
+ChatFrameUtil={
+    OpenChat=function(cmd) opened[#opened+1]=cmd end,
+    SendTell=function(name) tells[#tells+1]=name end,
+}
 local menuCalls=0
 local popups={}
 MenuUtil={CreateContextMenu=function(owner,build)
@@ -44,17 +52,18 @@ local tooltip={Hide=function() end,SetOwner=function() end,
 GameTooltip=tooltip
 Readable=function(v) return v end
 Print=function() end
-OpenSenderMenu({}, {sender="Player-Realm",synthetic=false})
-assert(menuCalls==1 and popups[1].title=="Player-Realm")
-assert(opened[1]==nil,"opening context menu must not submit WHO/whisper")
+OpenSenderMenu({}, {sender="Time Sync",synthetic=false})
+assert(menuCalls==1 and popups[1].title=="Time Sync")
+assert(opened[1]==nil and tells[1]==nil, "Opening menu must not send anything")
 popups[1]["Prepare Whisper"]()
-assert(opened[1]=="/w Player-Realm ")
+assert(tells[1]=="Time Sync" and opened[1]==nil,
+    "native whisper target must receive both names as one player")
 popups[1]["Prepare /who"]()
-assert(opened[2]=='/who n-"Player-Realm"' and whoUi==1)
-OpenSenderMenu({}, {sender="Player-Realm",synthetic=true})
-OpenSenderMenu({}, {sender="Evil Player",synthetic=false})
+assert(opened[1]=='/who n-"Time Sync"' and whoUi==1)
+OpenSenderMenu({}, {sender="Time Sync",synthetic=true})
+OpenSenderMenu({}, {sender="Evil/ Player",synthetic=false})
 assert(menuCalls==1,"test posts and invalid names must not open a context menu")
-local row={entry={sender="First",synthetic=false},scripts={},
+local row={entry={sender="First Last",synthetic=false},scripts={},
     GetFrameLevel=function() return 3 end}
 local hit
 CreateFrame=function(kind,_,parent)
@@ -68,12 +77,25 @@ end
 Hitbox(row)
 assert(hit.clicks=="RightButtonUp" and hit.level==5 and row.senderHitbox==hit)
 hit.scripts.OnClick(hit,"RightButton")
-assert(popups[2].title=="First")
-row.entry={sender="Second",synthetic=false}
+assert(popups[2].title=="First Last")
+row.entry={sender="Second Name",synthetic=false}
 popups[2]["Prepare Whisper"]()
-assert(opened[3]=="/w First ","menu callback must retain original sender after row reuse")
+assert(tells[2]=="First Last","menu callback must retain original sender after row reuse")
 hit.scripts.OnClick(hit,"RightButton")
-assert(popups[3].title=="Second")
+assert(popups[3].title=="Second Name")
+-- Native APIs preferred; /cw is the safe Forever fallback for two-part names.
+ChatFrameUtil.SendTell=nil
+ChatFrame_SendTell=nil
+popups[3]["Prepare Whisper"]()
+assert(opened[2]=="/cw Second Name ","fallback must target full name")
+local legacy={}
+ChatFrameUtil=nil
+ChatFrame_SendTell=function(name) legacy[#legacy+1]=name end
+popups[3]["Prepare Whisper"]()
+assert(legacy[1]=="Second Name", "legacy native whisper target")
+ChatFrame_SendTell=nil
+ChatFrame_OpenChat=function(cmd) opened[#opened+1]=cmd end
+assert(PrepareWhisper("Time Sync") and opened[3]=="/cw Time Sync ")
 
 -- Production large-icon construction uses Blizzard's proper 256x256 role
 -- atlas and 256x128 circular background sheet.
