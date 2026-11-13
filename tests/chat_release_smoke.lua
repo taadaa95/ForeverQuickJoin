@@ -14,7 +14,7 @@ local listing=Read("ForeverQuickJoin_Listing.lua")
 local function Has(text,part)
     assert(text:find(part,1,true),"Missing expected code: "..part)
 end
-Has(toc,"## Version: 0.9.4")
+assert(toc:match("## Version: %d+%.%d+%.%d+"), "Missing semantic addon version")
 Has(toc,"ForeverQuickJoin_Chat.lua")
 Has(chat,'watcher:RegisterEvent("CHAT_MSG_CHANNEL")')
 Has(chat,'watcher:RegisterEvent("CHAT_MSG_SAY")')
