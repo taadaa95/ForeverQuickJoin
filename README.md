@@ -28,6 +28,25 @@ You can change the shortcut anytime in Blizzard's Key Bindings settings under Ot
 <img width="1307" height="1099" alt="image" src="https://github.com/user-attachments/assets/1f45b7f6-b644-4fb7-bfde-b4a32d24a49c" />
 <img width="1419" height="1321" alt="image" src="https://github.com/user-attachments/assets/f924c604-4809-4d15-89ed-a1fa25c762a6" />
 
+🌍 Language Support
+
+Forever QuickJoin supports multiple languages, with automatic detection based on your WoW client language or manual selection through the Theme / Language dropdown.
+
+Supported languages:
+
+    🇬🇧 English
+    🇫🇷 Français (French)
+    🇩🇪 Deutsch (German)
+    🇪🇸 Español (Spanish)
+    🇧🇷 Português Brasileiro (Brazilian Portuguese)
+    🇷🇺 Русский (Russian)
+    🇨🇳 简体中文 (Simplified Chinese)
+    🇹🇼 繁體中文 (Traditional Chinese)
+    🇰🇷 한국어 (Korean)
+
+Custom whisper templates are preserved when changing languages. Untranslated interface text falls back to English.
+
+Note: Other players' chat messages are displayed in their original language and are not automatically translated.
 
 ForeverQuickJoin is completely free and actively developed.
 
