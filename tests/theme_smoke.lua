@@ -24,6 +24,7 @@ local function Frame(kind,parent,name)
     function f:SetAlpha(v) self.alpha=v;self.calls.alpha=(self.calls.alpha or 0)+1 end
     function f:SetWidth(v) self.width=v end
     function f:SetSize(w,h) self.width=w;self.height=h end
+    function f:SetJustifyH(value) self.justify=value end
     function f:SetPoint(...) end
     function f:Hide() self.hidden=true end
     function f:Show() self.hidden=false end
@@ -64,16 +65,18 @@ CreateFrame=function(kind,name,parent,template)
 end
 
 local function Menu()
-    local m={radio={},check=nil}
+    local m={radio={},check=nil,dungeon=nil}
     function m:SetTag(s) self.tag=s end
     function m:CreateRadio(text,selected,action)
         self.radio[text]={selected=selected,action=action}
     end
+    function m:CreateTitle(title) self.titles=self.titles or {};self.titles[#self.titles+1]=title end
     function m:CreateDivider() self.divider=true end
     function m:CreateCheckbox(text,selected,action)
-        self.check={name=text,selected=selected,action=action}
-        function self.check:SetSelectionIgnored() self.selectionIgnored=true end
-        return self.check
+        local entry={name=text,selected=selected,action=action}
+        function entry:SetSelectionIgnored() self.selectionIgnored=true end
+        if not self.check then self.check=entry else self.dungeon=entry end
+        return entry
     end
     return m
 end
@@ -89,13 +92,14 @@ local f=assert(loadfile("ForeverQuickJoin_Theme.lua"))
 f()
 local theme=assert(ForeverQuickJoinTheme)
 theme.Attach(originalWindow)
-assert(lastDropdown and lastDropdown.width==160,"Single dropdown replaces old buttons")
+assert(lastDropdown and lastDropdown.width==121,"Single dropdown replaces old buttons")
 assert(#originalWindow.children==3,"Expected: child, button, theme dropdown, not two theme buttons")
-assert(lastDropdown.text=="Forever","Original theme caption retained")
+assert(lastDropdown.text=="Forever · EN","Original theme caption retained")
 assert(originalWindow.bg[4]==1 and child.bg[4]==.9)
 local menu=Menu()
 lastDropdown.menuHandler(lastDropdown,menu)
-assert(menu.radio.Forever and menu.radio.Modern and menu.divider and menu.check,"Dropdown includes theme radios and transparency checkbox")
+assert(menu.radio.Forever and menu.radio.Modern and menu.divider and menu.check
+    and menu.dungeon and menu.radio["Français"],"Dropdown must include themes, language, and translation toggle")
 assert(menu.check.selectionIgnored,"Transparency must not change selection text")
 assert(menu.check.selected()==false)
 menu.check.action()
@@ -106,12 +110,12 @@ assert(originalWindow.bg[4]<1 and originalWindow.bg[4]>.5,"Forever window backdr
 assert(math.abs(child.bg[4]-.9*.58)<.001,"Original panel alpha proportional and transparent")
 assert(font.alpha==1 and originalWindow.alpha==1,"Text and window must not be faded")
 assert(ForeverQuickJoinDB.themeTransparency==true,"Per-character transparency saved")
-assert(lastDropdown.text=="Forever","Theme caption must remain Forever")
+assert(lastDropdown.text=="Forever · EN","Theme caption must retain theme and language")
 
 menu.radio.Modern.action()
 selected,trans=theme.Current()
 assert(selected=="Modern" and trans==true,"Modern retains transparency")
-assert(lastDropdown.text=="Modern")
+assert(lastDropdown.text=="Modern · EN")
 assert(originalWindow.bg[4]<1,"Modern background translucent")
 assert(originalWindow.backdrop.bgFile=="Interface\\Buttons\\WHITE8X8","Modern uses its own palette")
 theme.RowHover(child,true)

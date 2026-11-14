@@ -1052,6 +1052,9 @@ local function InstallFinderDropdown()
             if type(region.GetObjectType)=="function" and region:GetObjectType()=="FontString"
                 and type(region.GetText)=="function" then
                 local caption=region:GetText()
+                if ForeverQuickJoinLocale and ForeverQuickJoinLocale.SourceFor then
+                    caption=ForeverQuickJoinLocale.SourceFor(region) or caption
+                end
                 if type(caption)=="string" and caption:find("Search retrieves groups on click",1,true) then
                     finderHelpLabel=region
                     region:Hide()
