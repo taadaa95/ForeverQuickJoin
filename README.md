@@ -24,7 +24,7 @@ You can change the shortcut anytime in Blizzard's Key Bindings settings under Ot
 <img width="1421" height="1323" alt="image" src="https://github.com/user-attachments/assets/69c7329f-3411-4b06-bddf-ba446398055b" />
 <img width="608" height="1130" alt="image" src="https://github.com/user-attachments/assets/cf255af6-e217-4701-a819-3bbf62036a48" />
 <img width="1420" height="1323" alt="image" src="https://github.com/user-attachments/assets/3faa1c17-26bc-4e94-9fcb-a13f2d332408" />
-<img width="1419" height="1326" alt="image" src="https://github.com/user-attachments/assets/c3d7dc9e-7a4b-4e64-af2b-46b693fc56fe" />
+<img width="1413" height="1317" alt="image" src="https://github.com/user-attachments/assets/99a041af-159e-4923-819e-5390949dc87c" />
 <img width="1307" height="1099" alt="image" src="https://github.com/user-attachments/assets/1f45b7f6-b644-4fb7-bfde-b4a32d24a49c" />
 <img width="1419" height="1321" alt="image" src="https://github.com/user-attachments/assets/f924c604-4809-4d15-89ed-a1fa25c762a6" />
 <img width="365" height="655" alt="image" src="https://github.com/user-attachments/assets/06a17b1f-9c69-4acb-85c9-df2a34d39139" />
