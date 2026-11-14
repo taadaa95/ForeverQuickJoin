@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.8 — 2026-11-13
+
+- Added a combined **Theme / Language** dropdown retaining the Forever/Modern theme and transparency controls. UI languages include automatic client detection, English, French, German, Spanish (Spain and Latin America), Brazilian Portuguese, Russian, simplified/traditional Chinese, and Korean. Preferences are saved per character.
+- Localized QuickJoin interface controls, filters, statuses, and role-management panels, with readability adjustments for translated buttons and an English fallback for untranslated strings. Blizzard-provided text and other players’ chat messages are not automatically translated.
+- Added an optional **Translate Dungeon Names** setting. It localizes known dungeon names in activity selectors, group results, and LFG Chat without changing Blizzard activity IDs or query behavior; unknown activities retain their source text.
+- Added localized **default** whisper templates and LFG Chat replies. Custom user-authored whisper templates are never silently replaced when the language changes.
+- Repaired display of escaped quest hyperlinks in public LFG Chat messages, including several links in the same message and truncated or malformed links.
+- Made valid quest hyperlinks interactive in LFG Chat where the client supports native link hover/click events; a **Quest Links** menu provides access to individual linked quests where those events are not available.
+- The previously approved local v0.9.8-dev.5 addon is now integrated directly into Forever QuickJoin. Remove any old **ForeverQuickJoinThemeLanguageTest** companion folder. README unchanged.
+
 ## 0.9.7 — 2026-11-13
 
 - Fixed the LFG Chat sender context menu rejecting valid two-part **First Last** WoW Forever character names such as **Time Sync**.

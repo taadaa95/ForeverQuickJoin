@@ -39,9 +39,60 @@ local function SafeString(v)
     return v
 end
 
+-- Render only the visible labels from chat hyperlinks in this FontString.
+-- In some Forever chat-event paths, WoW escapes the pipe characters before
+-- AddPost receives them: ||Hquest:...||h[Quest]||h. The old implementation
+-- only understood unescaped |H...|h and displayed raw codes for those posts.
+-- We normalize escapes locally, without changing original chat data, then
+-- remove control sequences. This is display text, not a clickable chat link.
 local function ForDisplay(v, limit)
-    v = (v or ""):gsub("[\r\n]", " "):gsub("|", "||")
-    if limit and #v > limit then return v:sub(1, limit - 3) .. "..." end
+    v=Readable(v)
+    if type(v)~="string" then return "" end
+    v=v:gsub("[%c]", " ")
+
+    -- A message can have one or two layers of escaped pipe characters.
+    -- Normalize before parsing; never pass raw link commands to SetText.
+    for _=1,3 do
+        local decoded,n=v:gsub("||", "|")
+        v=decoded
+        if n==0 then break end
+    end
+
+    -- Preserve only the visible link label for quest, item, spell, etc.
+    -- Matching up to the second |h works even when a label has brackets.
+    v=v:gsub("|[Hh][^|]-|[hH](.-)|[hH]", function(label)
+        return label
+    end)
+    -- Recover the title of an incomplete link, e.g. a truncated chat post.
+    v=v:gsub("|[Hh][^|]-|[hH](%b[])", "%1")
+    v=v:gsub("|[Hh][^|]-|[hH]", "")
+    -- Remove any remaining unpaired hyperlink data rather than displaying it.
+    v=v:gsub("|[Hh][^%s|]*", "")
+    v=v:gsub("|[cC]%x%x%x%x%x%x%x%x", "")
+    v=v:gsub("|[rR]", "")
+    v=v:gsub("|[Tt][^|]-|[tT]", "")
+    v=v:gsub("|[Aa][^|]-|[aA]", "")
+    v=v:gsub("|[Kk][^|]-|[kK]", "")
+    v=v:gsub("|[hH]", "")
+    -- Quest links sometimes touch each other without an intervening space.
+    v=v:gsub("%]%s*%[", "] [")
+    -- Literal pipes should not be interpreted as future WoW escape sequences.
+    v=v:gsub("|", "||")
+
+    if limit and #v>limit then
+        local finish=math.max(0,limit-3)
+        -- Do not cut the last UTF-8 code point in half.
+        while finish>0 do
+            local byte=v:byte(finish+1)
+            if not byte or byte<128 or byte>191 then break end
+            finish=finish-1
+        end
+        -- Nor cut between an escaped pair of pipes.
+        if v:sub(finish,finish)=="|" and v:sub(finish+1,finish+1)=="|" then
+            finish=finish-1
+        end
+        return v:sub(1,finish).."..."
+    end
     return v
 end
 
@@ -106,6 +157,165 @@ local raidActivities = {
     ["Hyjal Summit"] = true,
 }
 
+-- Preserve safely validated quest hyperlinks in LFG Chat. Other links and
+-- unexpected chat markup remain plain readable text; never turn arbitrary
+-- incoming chat content into executable UI markup. The underlying chat entry
+-- retains the exact original message (no SavedVariables persistence).
+local function ValidQuestLink(link)
+    if type(link)~="string" or #link>120 then return false end
+    local id=link:match("^quest:(%d+)[:%d]*$")
+    return id~=nil and #id<=10 and tonumber(id)~=nil and tonumber(id)>0
+end
+
+local function DecodeChatPipes(value)
+    value=Readable(value)
+    if type(value)~="string" then return "" end
+    value=value:gsub("[%c]", " ")
+    -- WoW Forever may escape hyperlinks one or more times before firing the
+    -- chat event. Decoding here is safe: only verified quest IDs are rebuilt.
+    for _=1,3 do
+        local decoded,n=value:gsub("||", "|")
+        value=decoded
+        if n==0 then break end
+    end
+    return value
+end
+
+-- Returns native clickable markup and the actual parsed links, or the plain
+-- previous rendering if no valid quest link exists or hyperlinks are disabled.
+-- Truncation counts visible bytes, never markup bytes or half a hyperlink.
+local function QuestChatText(value, limit, enableLinks)
+    if not enableLinks then return ForDisplay(value,limit),{} end
+    local raw=DecodeChatPipes(value)
+    local links,out={},{}
+    local cursor,used=1,0
+    local function AppendPlain(value)
+        if used>=limit then return false end
+        local plain=ForDisplay(value)
+        if #plain>limit-used then
+            out[#out+1]=ForDisplay(value,limit-used)
+            used=limit
+            return false
+        end
+        out[#out+1]=plain
+        used=used+#plain
+        return true
+    end
+    for _=1,8 do -- limit hostile/spammy link counts, not normal recruitment
+        local first,last,link,label=raw:find("|[Hh](quest:[%d:]+)|[hH](.-)|[hH]",cursor)
+        if not first then break end
+        if not ValidQuestLink(link) then
+            -- Leave malformed data in the sanitized text path, not clickable.
+            if not AppendPlain(raw:sub(cursor,last)) then cursor=#raw+1; break end
+            cursor=last+1
+        else
+            local before=raw:sub(cursor,first-1)
+            local color=before:match("|[cC](%x%x%x%x%x%x%x%x)%s*$") or "ffffd100"
+            if not AppendPlain(before) then cursor=#raw+1; break end
+            local title=ForDisplay(label)
+            if title=="" then title="[Quest]" end
+            if used+#title>limit then
+                -- Never show malformed partially cut hyperlinks.
+                AppendPlain(label)
+                cursor=#raw+1
+                break
+            end
+            local full="|c"..color.."|H"..link.."|h"..title.."|h|r"
+            out[#out+1]=full
+            links[#links+1]={payload=link,label=title,full=full}
+            used=used+#title
+            cursor=last+1
+            if used>=limit then break end
+        end
+    end
+    if cursor<=#raw and used<limit then AppendPlain(raw:sub(cursor)) end
+    if #links==0 then return ForDisplay(value,limit),{} end
+    return table.concat(out),links
+end
+
+local function ShowQuestTooltip(owner,payload)
+    if not ValidQuestLink(payload) or not GameTooltip
+        or type(GameTooltip.SetHyperlink)~="function" then return end
+    GameTooltip:SetOwner(owner,"ANCHOR_CURSOR_RIGHT")
+    local ok=pcall(GameTooltip.SetHyperlink,GameTooltip,payload)
+    if ok then GameTooltip:Show() else GameTooltip:Hide() end
+end
+
+local function OpenQuestLink(owner,payload,label,button)
+    if not ValidQuestLink(payload) then return end
+    -- The link click callback may include WoW markup in its text argument.
+    -- Rebuild the native link from the validated quest ID and clean label.
+    local visible=ForDisplay(label or "[Quest]",100)
+    if visible=="" then visible="[Quest]" end
+    local full="|cffffd100|H"..payload.."|h"..visible.."|h|r"
+    -- Use Blizzard's normal chat-link handler rather than inventing a quest
+    -- detail viewer or requesting restricted quest data.
+    if type(SetItemRef)=="function" then
+        local ok=pcall(SetItemRef,payload,full,button or "LeftButton")
+        if ok then return end
+    end
+    if type(ChatFrame_OnHyperlinkShow)=="function" then
+        local ok=pcall(ChatFrame_OnHyperlinkShow,owner,payload,full,button or "LeftButton")
+        if ok then return end
+    end
+    -- If the client does not expose the link click APIs, at least show the
+    -- native quest tooltip instead of silently doing nothing.
+    ShowQuestTooltip(owner,payload)
+end
+
+local function SetupQuestMessageLinks(row)
+    local native=false
+    if type(row.SetHyperlinksEnabled)=="function" then
+        native=pcall(row.SetHyperlinksEnabled,row,true)
+    end
+    row.nativeQuestLinks=native
+    if native then
+        if type(row.EnableMouse)=="function" then row:EnableMouse(true) end
+        row:SetScript("OnHyperlinkEnter",function(self,link)
+            ShowQuestTooltip(self,link)
+        end)
+        row:SetScript("OnHyperlinkLeave",function()
+            if GameTooltip then GameTooltip:Hide() end
+        end)
+        row:SetScript("OnHyperlinkClick",function(self,link,text,button)
+            OpenQuestLink(self,link,text,button)
+        end)
+    else
+        -- Compatibility fallback: if this client lacks FontString hyperlink
+        -- events, a visible Quest Links button opens the same native link via
+        -- a menu. Each quest is independently selectable even with 2+ links.
+        local button=CreateFrame("Button",nil,row,"UIPanelButtonTemplate")
+        button:SetPoint("TOPLEFT",row,"TOPLEFT",420,-40)
+        button:SetSize(97,22)
+        button:SetText("Quest Links")
+        button:SetScript("OnClick",function(self)
+            local links=row.questLinks or {}
+            if #links==1 then
+                OpenQuestLink(self,links[1].payload,links[1].label,"LeftButton")
+            elseif #links>1 and MenuUtil and type(MenuUtil.CreateContextMenu)=="function" then
+                MenuUtil.CreateContextMenu(self,function(_,menu)
+                    menu:CreateTitle("Linked Quests")
+                    for _,link in ipairs(links) do
+                        local payload,title=link.payload,link.label
+                        menu:CreateButton(title,function()
+                            OpenQuestLink(self,payload,title,"LeftButton")
+                        end)
+                    end
+                end)
+            end
+        end)
+        button:SetScript("OnEnter",function(self)
+            local links=row.questLinks or {}
+            if #links==1 then ShowQuestTooltip(self,links[1].payload) end
+        end)
+        button:SetScript("OnLeave",function()
+            if GameTooltip then GameTooltip:Hide() end
+        end)
+        button:Hide()
+        row.questLinkButton=button
+    end
+end
+
 local function NormalizeWords(s)
     if type(s) ~= "string" then return "" end
     return s:lower():gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
@@ -114,8 +324,12 @@ local function NormalizeWords(s)
 end
 
 local function Classify(message)
-    local s = message:lower():gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
-    s = s:gsub("|h.-|h", " "):gsub("[%p]", function(ch)
+    -- Distinguish linked quests even when the link's visible title does not
+    -- contain the word "quest". Single and doubled pipes both match here.
+    local hasQuestLink=message:find("|Hquest:",1,true)~=nil
+        or message:find("|hquest:",1,true)~=nil
+    local s=ForDisplay(message):lower()
+    s = s:gsub("[%p]", function(ch)
         if ch == "'" or ch == "-" then return ch end
         return " "
     end)
@@ -155,7 +369,8 @@ local function Classify(message)
     elseif not found and HasAny(s,{"raid", "raids"}) then
         activity="Any raid"; category="raid"
     end
-    if not found and (HasAny(s,{"quest", "quests", "questing", "elite", "escorts", "group quest", "zone", "grinding"})
+    if not found and (hasQuestLink
+        or HasAny(s,{"quest", "quests", "questing", "elite", "escorts", "group quest", "zone", "grinding"})
         or s:find("%f[%w]q%s*%d+%f[%W]")) then
         activity="Quests / Zones"
         category="quest"
@@ -427,8 +642,16 @@ local function RoleName()
 end
 
 local function MakeChatWhisper(entry)
+    local activity=entry.activity
+    if entry.category=="dungeon" and ForeverQuickJoinLocale
+        and type(ForeverQuickJoinLocale.TranslateDungeonName)=="function" then
+        activity=ForeverQuickJoinLocale.TranslateDungeonName(activity,2)
+    end
     if entry.kind=="LFG" then
-        return "I saw your LFG post for "..entry.activity..". Are you still looking for a group?"
+        if ForeverQuickJoinLocale and type(ForeverQuickJoinLocale.ChatLFGReply)=="function" then
+            return ForeverQuickJoinLocale.ChatLFGReply(activity)
+        end
+        return "I saw your LFG post for "..activity..". Are you still looking for a group?"
     end
     local level=tonumber(Readable(type(UnitLevel)=="function" and UnitLevel("player"))) or 0
     local class=SafeString(type(UnitClass)=="function" and UnitClass("player")) or "player"
@@ -452,7 +675,7 @@ local function MakeChatWhisper(entry)
     local template=(type(ForeverQuickJoinDB)=="table" and SafeString(ForeverQuickJoinDB.template))
         or "Level {level} {class} {role} LFG {activity}, Current location: {location}, inv please!"
     local values={level=tostring(level),class=class,name=name,role=role,
-        activity=entry.activity,location=zone,party=table.concat(partyNames, "; "),partycount=tostring(total)}
+        activity=activity,location=zone,party=table.concat(partyNames, "; "),partycount=tostring(total)}
     local message=template:gsub("{([%w_]+)}",function(k)
         k=k:lower()
         return values[k] or "{"..k.."}"
@@ -592,7 +815,13 @@ local function DropdownCaption(drop)
         local fn=source.GetText
         if type(fn)=="function" then
             local ok,v=pcall(fn,source)
-            if ok then return SafeString(v) end
+            if ok then
+                -- The user-visible dropdown can be translated. Retain the
+                -- native source caption for filter/category comparison.
+                local locale=ForeverQuickJoinLocale
+                local original=locale and locale.SourceFor and locale.SourceFor(source)
+                return SafeString(original or v)
+            end
         end
     end
     local result=Value(drop.Text) or Value(drop.text) or Value(drop.DropdownText) or Value(drop)
@@ -718,6 +947,9 @@ local function FixResultsLayout(window)
     if type(findContent.GetRegions)=="function" then
         for _,region in ipairs({findContent:GetRegions()}) do
             local caption=region.GetText and region:GetText()
+            if ForeverQuickJoinLocale and ForeverQuickJoinLocale.SourceFor then
+                caption=ForeverQuickJoinLocale.SourceFor(region) or caption
+            end
             local x=caption=="LEADER" and 36
                 or caption=="ACTIVITY / PLAYSTYLE" and 211
                 or caption=="GROUP ROLES" and 442
@@ -837,9 +1069,29 @@ Refresh = function()
             local age = math.floor(math.max(0, Now()-e.time)/60)
             row.name:SetText(ForDisplay(e.sender,25)..(e.synthetic and " |cffffff77[TEST]|r" or ""))
             row.kind:SetText(e.kind)
-            row.activity:SetText(ForDisplay(e.activity,31))
+            local activityLabel=e.activity
+            if e.category=="dungeon" and ForeverQuickJoinLocale
+                and type(ForeverQuickJoinLocale.TranslateDungeonName)=="function" then
+                activityLabel=ForeverQuickJoinLocale.TranslateDungeonName(e.activity,2)
+            end
+            row.activity:SetText(ForDisplay(activityLabel,31))
             row.info:SetText(ForDisplay(e.channel,24).."  |  "..age.."m  |  "..(e.roles~="" and e.roles or "Roles unspecified")..(e.repeats>1 and "  x"..e.repeats or ""))
-            row.message:SetText(ForDisplay(e.text,115))
+            local linkedText,quests=QuestChatText(e.text,115,true)
+            row.questLinks=quests
+            if row.nativeQuestLinks then
+                row.message:SetText(linkedText)
+            else
+                row.message:SetText(ForDisplay(e.text,#quests>0 and 85 or 115))
+            end
+            if row.questLinkButton then
+                if #quests>0 then
+                    row.message:SetWidth(405)
+                    row.questLinkButton:Show()
+                else
+                    row.message:SetWidth(515)
+                    row.questLinkButton:Hide()
+                end
+            end
             row.whisper:SetEnabled(not e.synthetic)
             row.invite:SetEnabled(not e.synthetic and e.kind=="LFG")
             row.whisper:SetText(e.whisper and "W sent" or "Whisper to Join")
@@ -852,7 +1104,11 @@ Refresh = function()
             row.whisper:GetFontString():SetTextColor(e.whisper and .30 or 1,e.whisper and 1 or .83,e.whisper and .48 or .7)
             row.invite:GetFontString():SetTextColor(inviteState=="confirmed" and .30 or 1,
                 inviteState=="confirmed" and 1 or .83,inviteState=="confirmed" and .48 or .7)
-        else row:Hide() end
+        else
+            row.questLinks={}
+            if row.questLinkButton then row.questLinkButton:Hide() end
+            row:Hide()
+        end
     end
     if status and status:GetText()=="" then status:SetText("LFG Chat ready; /qjchat test inserts sample posts.") end
 end
@@ -995,6 +1251,14 @@ local function InstallChatPanel(window)
         row.activity=Label(row,"",239,4,275,19)
         row.info=Label(row,"",8,24,505,16)
         row.message=Label(row,"",8,43,515,17)
+        SetupQuestMessageLinks(row)
+        -- Chat posts, player identities, and activity descriptions are data,
+        -- never interface labels. Keep their original language untouched.
+        if ForeverQuickJoinLocale and ForeverQuickJoinLocale.Ignore then
+            for _,font in ipairs({row.name,row.kind,row.activity,row.info,row.message}) do
+                ForeverQuickJoinLocale.Ignore(font)
+            end
+        end
         row.whisper=Button(row,"Whisper to Join",532,7,103,24,function(self)
             if row.entry then AttemptWhisper(row.entry) end
         end)
@@ -1021,13 +1285,19 @@ end
 local function Install(window,drawer,rows)
     if root then return end
     root=window
+    -- Repaint only cached public posts when language/display preferences change.
+    window.QuickJoinChatRefresh=function() if Refresh then Refresh() end end
     findContent=_G.ForeverQuickJoinFindContent
     if not findContent then Print("Finder frame unavailable; LFG Chat was not initialized."); return end
     -- Hide the original caption without an opaque cover (transparency preserved).
     if findContent.GetRegions then
         for _, region in ipairs({findContent:GetRegions()}) do
+            local caption=region.GetText and region:GetText()
+            if ForeverQuickJoinLocale and ForeverQuickJoinLocale.SourceFor then
+                caption=ForeverQuickJoinLocale.SourceFor(region) or caption
+            end
             if region.GetObjectType and region:GetObjectType()=="FontString"
-                and region.GetText and region:GetText()=="GROUP LISTINGS" then
+                and caption=="GROUP LISTINGS" then
                 oldHeading=region; oldHeading:Hide()
             end
         end

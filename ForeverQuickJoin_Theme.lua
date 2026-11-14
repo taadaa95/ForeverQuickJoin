@@ -131,6 +131,9 @@ local function StyleFont(font)
         baseFonts[font]=saved
     end
     local text=Safe(font,"GetText")
+    if ForeverQuickJoinLocale and ForeverQuickJoinLocale.SourceFor then
+        text=ForeverQuickJoinLocale.SourceFor(font) or text
+    end
     local heading=IsHeading(text)
     local parent=Safe(font,"GetParent")
     local inButton=Safe(parent,"GetObjectType")=="Button"
@@ -186,6 +189,10 @@ local function RefreshButton(button)
         return
     end
     local text=Safe(button,"GetText")
+    if ForeverQuickJoinLocale and ForeverQuickJoinLocale.SourceFor then
+        local font=Safe(button,"GetFontString")
+        text=ForeverQuickJoinLocale.SourceFor(font) or text
+    end
     local kind=ButtonKind(text)
     local disabled=Safe(button,"IsEnabled")==false
     local hover=hovering[button]==true and not disabled
@@ -290,7 +297,9 @@ end
 
 local function UpdateDropdown()
     if themeDropdown and type(themeDropdown.OverrideText)=="function" then
-        themeDropdown:OverrideText(active)
+        local code=(ForeverQuickJoinLocale and ForeverQuickJoinLocale.ShortCode
+            and ForeverQuickJoinLocale.ShortCode()) or "EN"
+        themeDropdown:OverrideText(active.." · "..code)
     end
 end
 
@@ -303,6 +312,9 @@ function Theme.ApplyNew()
     if advanced then Visit(advanced,{},{count=0}) end
     for _,texture in ipairs(chrome) do
         if active=="Modern" then texture:Show() else texture:Hide() end
+    end
+    if ForeverQuickJoinLocale and ForeverQuickJoinLocale.Refresh then
+        ForeverQuickJoinLocale.Refresh()
     end
 end
 
@@ -347,35 +359,88 @@ function Theme.RowHover(row,entered)
     end
 end
 
+-- The top navigation begins at x=475. The label and dropdown stay wholly
+-- to its left, including WowStyle1DropdownTemplate's extra right-hand art.
 function Theme.Attach(window,drawer,rows)
     if root then return end
     root,advanced=window,drawer
     active=(ForeverQuickJoinDB and ForeverQuickJoinDB.theme=="Modern") and "Modern" or "Forever"
     transparent=ForeverQuickJoinDB and ForeverQuickJoinDB.themeTransparency==true or false
+    local locale=ForeverQuickJoinLocale
     local title=window:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
-    title:SetPoint("TOPLEFT",window,"TOPLEFT",247,-22)
-    title:SetText("Theme:")
+    title:SetPoint("TOPLEFT",window,"TOPLEFT",208,-22)
+    title:SetSize(112,20)
+    title:SetJustifyH("LEFT")
+    title:SetText("Theme / Language:")
     themeDropdown=CreateFrame("DropdownButton",nil,window,"WowStyle1DropdownTemplate")
-    themeDropdown:SetWidth(160)
-    themeDropdown:SetPoint("TOPLEFT",window,"TOPLEFT",291,-12)
-    themeDropdown:SetDefaultText("Forever")
+    themeDropdown:SetWidth(121)
+    themeDropdown:SetPoint("TOPLEFT",window,"TOPLEFT",322,-12)
+    themeDropdown:SetDefaultText("Forever · EN")
     themeDropdown:SetupMenu(function(_,menu)
-        menu:SetTag("MENU_FOREVER_QUICKJOIN_THEME")
-        menu:CreateRadio("Forever",
-            function() return active=="Forever" end,
+        menu:SetTag("MENU_FOREVER_QUICKJOIN_THEME_LANGUAGE")
+        local function T(text)
+            return locale and locale.Translate and locale.Translate(text) or text
+        end
+        local function Radio(label,checked,callback)
+            local option=menu:CreateRadio(label,checked,callback)
+            if option and type(option.SetSelectionIgnored)=="function" then
+                option:SetSelectionIgnored()
+            end
+            return option
+        end
+        menu:CreateTitle(T("Theme"))
+        Radio("Forever",function() return active=="Forever" end,
             function() Theme.Select("Forever") end)
-        menu:CreateRadio("Modern",
-            function() return active=="Modern" end,
+        Radio("Modern",function() return active=="Modern" end,
             function() Theme.Select("Modern") end)
-        menu:CreateDivider()
-        local checkbox=menu:CreateCheckbox("Transparency",
+        local checkbox=menu:CreateCheckbox(T("Transparency"),
             function() return transparent end,
             function() Theme.ToggleTransparency() end)
-        -- Checkbox state should not change the dropdown's theme caption.
         if checkbox and type(checkbox.SetSelectionIgnored)=="function" then
             checkbox:SetSelectionIgnored()
         end
+        menu:CreateDivider()
+        local names=menu:CreateCheckbox(T("Translate Dungeon Names"),
+            function() return locale and locale.DungeonNamesEnabled and locale.DungeonNamesEnabled() end,
+            function()
+                if locale and locale.SetTranslateDungeonNames then
+                    locale.SetTranslateDungeonNames(not locale.DungeonNamesEnabled())
+                    if window.QuickJoinLanguageChanged then window:QuickJoinLanguageChanged() end
+                end
+            end)
+        if names and type(names.SetSelectionIgnored)=="function" then
+            names:SetSelectionIgnored()
+        end
+        menu:CreateDivider()
+        menu:CreateTitle(T("Language"))
+        local selected=locale and locale.Current and locale.Current() or "auto"
+        local choices={
+            {"auto",T("Automatic (client language)")},
+            {"enUS","English"},
+            {"frFR","Français"},
+            {"deDE","Deutsch"},
+            {"esES","Español"},
+            {"esMX","Español (Latinoamérica)"},
+            {"ptBR","Português (Brasil)"},
+            {"ruRU","Русский"},
+            {"zhCN","简体中文"},
+            {"zhTW","繁體中文"},
+            {"koKR","한국어"},
+        }
+        for _,option in ipairs(choices) do
+            local code,label=option[1],option[2]
+            Radio(label,function()
+                return locale and locale.Current and locale.Current()==code
+            end,function()
+                if locale and locale.Select then
+                    locale.Select(code)
+                    Theme.ApplyNew()
+                    if window.QuickJoinLanguageChanged then window:QuickJoinLanguageChanged() end
+                end
+            end)
+        end
     end)
+    if locale and locale.Attach then locale.Attach(window) end
     AddChrome(window,drawer)
     Theme.ApplyNew()
 end

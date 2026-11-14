@@ -457,6 +457,15 @@ local function GetRole()
     return "DPS"
 end
 
+local function LocalizeDungeonActivityName(label,info)
+    local locale=ForeverQuickJoinLocale
+    if locale and type(locale.TranslateDungeonName)=="function" then
+        local category=Readable(info and info.categoryID) or state.categoryID
+        return locale.TranslateDungeonName(label,category)
+    end
+    return label
+end
+
 local function ActivityDisplayName(activityID)
     if type(activityID)~="number" or not C_LFGList
         or type(C_LFGList.GetActivityInfoTable)~="function" then return nil end
@@ -467,11 +476,11 @@ local function ActivityDisplayName(activityID)
     if type(LFGUtil_GetActivityInfoName)=="function" then
         local good,label=pcall(LFGUtil_GetActivityInfoName,info)
         label=good and Readable(label) or nil
-        if type(label)=="string" and label~="" then return label end
+        if type(label)=="string" and label~="" then return LocalizeDungeonActivityName(label,info) end
     end
     for _,field in ipairs({"fullName","shortName","name"}) do
         local label=Readable(info[field])
-        if type(label)=="string" and label~="" then return label end
+        if type(label)=="string" and label~="" then return LocalizeDungeonActivityName(label,info) end
     end
     return "Activity "..activityID
 end
@@ -667,7 +676,13 @@ local function FormatRoster(roster, compact)
 end
 
 local function DefaultTemplate()
-    return GroupSize() > 0 and PARTY_DEFAULT_MESSAGE or DEFAULT_MESSAGE
+    local grouped=GroupSize()>0
+    local english=grouped and PARTY_DEFAULT_MESSAGE or DEFAULT_MESSAGE
+    local locale=ForeverQuickJoinLocale
+    if locale and type(locale.DefaultWhisperTemplate)=="function" then
+        return locale.DefaultWhisperTemplate(grouped,english)
+    end
+    return english
 end
 
 local function BuildMessage(info)
@@ -2507,6 +2522,20 @@ local function CreateWindow()
         ForeverQuickJoinApplications.Attach(window)
     end
     window.QuickJoinUpdatePreview = UpdatePreview
+    -- Language and dungeon-display toggles never perform protected searches.
+    -- Rebuild only the local visible labels and cached result pages, retaining
+    -- selected native activity IDs and all custom whisper templates.
+    window.QuickJoinLanguageChanged = function()
+        SyncDefaultForParty()
+        if state.categoryID then
+            state.activities=GetActivities(state.categoryID)
+            SetAllowedActivities(state.activities)
+            UpdateActivityDropdown()
+        end
+        RebuildVisibleResults(true)
+        if window.QuickJoinChatRefresh then window.QuickJoinChatRefresh() end
+        UpdatePreview()
+    end
     window.QuickJoinUpdateSent = UpdatePages
     window.QuickJoinStatus = Status
     if ForeverQuickJoinParty and ForeverQuickJoinParty.Attach then
