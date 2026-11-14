@@ -98,7 +98,7 @@ assert(originalWindow.bg[4]==1 and child.bg[4]==.9)
 local menu=Menu()
 lastDropdown.menuHandler(lastDropdown,menu)
 assert(menu.radio.Forever and menu.radio.Modern and menu.divider and menu.check
-    and menu.dungeon and menu.radio.Français,"Dropdown must include themes, language, and translation toggle")
+    and menu.dungeon and menu.radio["Français"],"Dropdown must include themes, language, and translation toggle")
 assert(menu.check.selectionIgnored,"Transparency must not change selection text")
 assert(menu.check.selected()==false)
 menu.check.action()
