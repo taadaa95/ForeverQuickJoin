@@ -110,7 +110,7 @@ assert(originalWindow.bg[4]<1 and originalWindow.bg[4]>.5,"Forever window backdr
 assert(math.abs(child.bg[4]-.9*.58)<.001,"Original panel alpha proportional and transparent")
 assert(font.alpha==1 and originalWindow.alpha==1,"Text and window must not be faded")
 assert(ForeverQuickJoinDB.themeTransparency==true,"Per-character transparency saved")
-assert(lastDropdown.text=="Forever","Theme caption must remain Forever")
+assert(lastDropdown.text=="Forever · EN","Theme caption must retain theme and language")
 
 menu.radio.Modern.action()
 selected,trans=theme.Current()
