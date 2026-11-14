@@ -24,6 +24,7 @@ local function Frame(kind,parent,name)
     function f:SetAlpha(v) self.alpha=v;self.calls.alpha=(self.calls.alpha or 0)+1 end
     function f:SetWidth(v) self.width=v end
     function f:SetSize(w,h) self.width=w;self.height=h end
+    function f:SetJustifyH(value) self.justify=value end
     function f:SetPoint(...) end
     function f:Hide() self.hidden=true end
     function f:Show() self.hidden=false end
