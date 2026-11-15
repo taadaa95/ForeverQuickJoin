@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.10 — 2026-11-15
+
+- Monitor Mode now remains active until the player joins a group or stops monitoring with a right-click; dismissed groups no longer end monitoring and expired/failed searches do not shut it down.
+- The floating monitor icon supports **left-click Search Again** for a new, player-initiated Group Finder search without reopening QuickJoin. Right-click still stops and dragging still repositions it. Protected server searches are never scheduled automatically.
+- While active, Monitor Mode listens continuously for incoming public **LookingForGroup and other subscribed chat channels**, as well as Say and Yell recruitment messages. Matching messages appear alongside structured Group Listings with clear source labels, 10-minute expiry, deduplication, and rate-limited notifications.
+- LFG Chat notifications respect the selected dungeon/activity but **ignore Advanced Filters** that cannot be verified from a chat advertisement. Structured Group Listings continue to apply all existing Advanced Filters and role-aware sorting.
+- Monitor Mode can automatically join **LookingForGroup**, respecting the existing QuickJoin auto-join preference (also available through the translated Settings checkbox and `/qjchat autojoin on|off`). It does not force-join when explicitly disabled.
+- Whispering a group leader marks that person's existing popup **Whisper to Join** button **Whispered** and disables/greys it out. Contact status is shared across Group Listings and LFG Chat, survives Search Again and new result IDs during the current session, and resets on logout or UI reload.
+- Whispered groups stay available to review in the popup, but previously contacted leaders do not generate duplicate chat alerts. Dismissing a listing with X remains independent from Whispered status; **no separate history button or window**.
+- Localized popup/tooltip labels and settings remain available in all 10 supported languages. User-triggered whispers and invitations only; no unattended server searches or chat messages. README unchanged.
+
 ## 0.9.9 — 2026-11-15
 
 - Integrated **Monitor Mode** directly into Forever QuickJoin. It is off by default for new users, saves its setting per character, and displays a draggable status icon only during an active player-initiated Group Finder search.

@@ -1,8 +1,10 @@
 -- Forever QuickJoin Monitor Mode for WoW Forever 1.60.1
--- Integrated with ForeverQuickJoin v0.9.9. GROUP LISTINGS ONLY.
--- 0.9.9 release: per-listing dismissal, role-aware sorting, localized popups, settings.
--- Searches are only player-click-initiated: QuickJoin Search or an orb right-click.
--- No timers call Search(), no chat capture, no automatic messages or invitations.
+-- Integrated with ForeverQuickJoin v0.9.10 (release).
+-- Group Listings: new server queries always require a player click.
+-- LFG Chat: live public recruitment posts use activity filters only.
+-- LookingForGroup auto-join uses the native chat API and respects
+-- QuickJoin's existing chatAutoJoin preference and rate limits.
+-- No timer triggers a protected Search(), whisper, or invite.
 local ADDON = ...
 local M = {}
 ForeverQuickJoinMonitor = M
@@ -12,12 +14,23 @@ local DB, scope, latestSearch, searchButton, mainWindow
 local popup, indicator, context, contextWho, contextWhisper, intro, introNever
 local themeDropdown, orbSpinner = nil, nil
 local RenameSettingsLabel, ApplyMinimapLogo
-local Start, UpdateIndicator, PositionPopup, PlayPopupIntro, ApplyTheme, ShowIntro, RefreshIntroLocale
+local Start, UpdateIndicator, PositionPopup, PlayPopupIntro, ApplyTheme, ShowIntro, RefreshIntroLocale, MonitorLanguage
 local orbSearchAttempt, orbSearchAt = false, 0
 local header, activityText, subtext, roleText, descriptionText, queueText, freshnessText
 local whisperButton, inviteButton, expandButton, rosterTitle, prevButton, nextButton, rosterPager, groupPager, contextCloseButton
 local rosterRows, pending, seen, searchIDs, attempts = {}, {}, {}, {}, {}
 local collectingResults = false
+local Enqueue -- forward declaration: live chat handler enqueues after source validation
+local dismissed = {} -- explicit X dismissals; chat dismissals survive manual refreshes
+-- Contact status lasts for this play session only (no SavedVariables writes).
+-- Track by normalized leader name across Group Listings and LFG Chat.
+-- Dismissing a listing is independent of whispering the player.
+local whisperedLeaders = {}
+
+local CHAT_TTL = 600
+local chatAlertAt = -100
+local chatObserved, chatMatched = 0, 0
+local wasGrouped = false
 local prevGroupButton, nextGroupButton, selectedIndex = nil, nil, 1
 local themedButtons={}
 local ApplyButtonTheme, ApplyPanelTheme
@@ -26,7 +39,7 @@ local whoZones = {}
 local expanded, rosterOffset, verifiedAt = false, 0, nil
 local lastUserSearchAt = 0
 local SEARCH_FRESH_SECONDS = 300
-local INTRO_VERSION = "monitor-mode-5"
+local INTRO_VERSION = "monitor-mode-7"
 local NOTIFY_DEDUP_SECONDS = 600
 local MAX_QUEUE = 35
 local ROW_COUNT = 7
@@ -65,6 +78,10 @@ local function SafeName(v)
     if not v or #v>100 or v:find('[|"\r\n]') or v:find('[%c]') then return nil end
     return v:match('^%s*(.-)%s*$')~="" and v or nil
 end
+local function LeaderKey(name)
+    name=SafeName(name)
+    return name and name:lower() or nil
+end
 local function Print(text)
     if DEFAULT_CHAT_FRAME then
         DEFAULT_CHAT_FRAME:AddMessage("|cff62c8efQuickJoin Monitor|r: "..tostring(text))
@@ -87,6 +104,18 @@ local function Copy(tbl,depth)
     end
     return out
 end
+local function InGroup()
+    -- WoW Forever supports IsInGroup; fall back to group-size APIs.
+    if type(IsInGroup)=="function" then
+        local ok,value=pcall(IsInGroup)
+        if ok and type(value)=="boolean" then return value end
+    end
+    if type(GetNumGroupMembers)=="function" then
+        local ok,value=pcall(GetNumGroupMembers)
+        if ok and type(value)=="number" then return value>0 end
+    end
+    return false
+end
 local function SetDB()
     if type(ForeverQuickJoinMonitorDB)~="table" then ForeverQuickJoinMonitorDB={} end
     DB=ForeverQuickJoinMonitorDB
@@ -97,6 +126,57 @@ local function SetDB()
     if type(DB.orbX)~="number" or math.abs(DB.orbX)>6000 then DB.orbX=310 end
     if type(DB.orbY)~="number" or math.abs(DB.orbY)>6000 then DB.orbY=-90 end
 end
+
+-- Main QuickJoin already attempts to join LookingForGroup on login. Monitor
+-- checks that the character is actually subscribed when monitoring begins,
+-- and retries at most twice per monitoring session if necessary. The existing
+-- /qjchat autojoin off preference ALWAYS wins; this code never rejoins a
+-- channel after the user explicitly opts out.
+local lfgJoinLastAt, lfgJoinAttempts, lfgJoinStatus = -100000, 0, "not checked"
+local lfgJoinNotBefore = 0
+local function ChatAutoJoinOn()
+    return type(ForeverQuickJoinDB)~="table" or ForeverQuickJoinDB.chatAutoJoin~=false
+end
+local function LFGJoined()
+    if type(GetChannelName)~="function" then return false end
+    local ok,id=pcall(GetChannelName,"LookingForGroup")
+    id=ok and Readable(id) or nil
+    return type(id)=="number" and id>0
+end
+local function TryAutoJoinLFG(userInitiated)
+    if not ChatAutoJoinOn() then
+        lfgJoinStatus="disabled in QuickJoin"
+        return false
+    end
+    if LFGJoined() then
+        lfgJoinStatus="joined"
+        lfgJoinAttempts=0
+        return true
+    end
+    if not userInitiated and (not active or not DB or not DB.enabledOnSearch) then return false end
+    if not userInitiated and Now()<lfgJoinNotBefore then return false end
+    if not userInitiated and (lfgJoinAttempts>=2 or Now()-lfgJoinLastAt<30) then return false end
+    if type(JoinPermanentChannel)~="function" then
+        lfgJoinStatus="client API unavailable"
+        return false
+    end
+    if type(InCombatLockdown)=="function" and InCombatLockdown() then
+        lfgJoinStatus="waiting for combat to end"
+        return false
+    end
+    lfgJoinAttempts=lfgJoinAttempts+1
+    lfgJoinLastAt=Now()
+    local frameID=ChatFrame1 and type(ChatFrame1.GetID)=="function" and ChatFrame1:GetID() or nil
+    -- Standard public channel subscription. Never sends a message to chat.
+    local ok,result=pcall(JoinPermanentChannel,"LookingForGroup",nil,frameID)
+    if not ok or result==false then
+        lfgJoinStatus="channel join rejected"
+        return false
+    end
+    lfgJoinStatus=LFGJoined() and "joined" or "join requested"
+    return true
+end
+
 -- QuickJoin Monitor's own introduction strings. The main addon's locale
 -- dictionary does not contain these feature-specific sentences.
 local introText={
@@ -107,11 +187,11 @@ local introText={
         step1="1. ENABLE MONITOR MODE",
         step1Body="Open QuickJoin (/qj) and turn on Monitor Mode in Settings. Select your activities, use Advanced Filters to refine your search, and click Search.",
         step2="2. KEEP PLAYING",
-        step2Body="QuickJoin keeps looking for matching groups in the background while you play and notifies you when it finds one.",
+        step2Body="QuickJoin monitors matching Group Listings and listens for new LFG Chat recruitment messages while you play. Left-click the icon to search Group Listings again.",
         step3="3. JOIN WHEN READY",
         step3Body="Click Whisper to Join, Invite, or view Details.",
-        controls="ICON: LEFT-CLICK opens QuickJoin  |  RIGHT-CLICK stops monitoring  |  DRAG moves",
-        note="Only Group Listings are monitored. New searches require a click.",
+        controls="ICON: LEFT-CLICK searches again  |  RIGHT-CLICK stops monitoring  |  DRAG moves",
+        note="Group Listings need a manual search; public LFG Chat updates arrive automatically while monitoring.",
         never="Don't show this message again",
         ok="Got it!",
         help="What's New / Help",
@@ -124,11 +204,11 @@ local introText={
         step1="1. ACTIVER LE MODE SURVEILLANCE",
         step1Body="Ouvrez QuickJoin (/qj), puis activez le mode surveillance dans Paramètres. Choisissez vos activités, affinez la recherche avec les filtres avancés et cliquez sur Rechercher.",
         step2="2. CONTINUER À JOUER",
-        step2Body="QuickJoin continue de chercher des groupes correspondants en arrière-plan pendant que vous jouez et vous avertit lorsqu’il en trouve un.",
+        step2Body="QuickJoin surveille les annonces correspondantes et écoute les nouvelles demandes de groupe dans le chat RdG pendant que vous jouez. Clic gauche sur l’icône : relancer la recherche d’annonces.",
         step3="3. REJOINDRE UN GROUPE",
         step3Body="Cliquez sur Chuchoter pour rejoindre, Inviter ou Détails.",
-        controls="ICÔNE : CLIC GAUCHE : ouvrir QuickJoin  |  CLIC DROIT : arrêter la surveillance  |  GLISSER : déplacer",
-        note="Seules les annonces de groupe sont suivies. Une nouvelle recherche nécessite un clic.",
+        controls="ICÔNE : CLIC GAUCHE : relancer la recherche  |  CLIC DROIT : arrêter la surveillance  |  GLISSER : déplacer",
+        note="Les annonces nécessitent une recherche manuelle ; les messages du chat RdG arrivent automatiquement.",
         never="Ne plus afficher ce message",
         ok="Compris !",
         help="Nouveautés / Aide",
@@ -141,11 +221,11 @@ local introText={
         step1="1. MONITORMODUS AKTIVIEREN",
         step1Body="Öffne QuickJoin (/qj) und aktiviere den Monitormodus unter Einstellungen. Wähle Aktivitäten, verfeinere die Suche mit Erweiterten Filtern und klicke auf Suchen.",
         step2="2. WEITERSPIELEN",
-        step2Body="QuickJoin sucht im Hintergrund weiter nach passenden Gruppen, während du spielst, und benachrichtigt dich, sobald eine passende Gruppe gefunden wird.",
+        step2Body="QuickJoin überwacht passende Gruppenangebote und neue LFG-Chat-Anzeigen während des Spielens. Linksklick auf das Symbol sucht erneut nach Gruppenangeboten.",
         step3="3. GRUPPE BEITRETEN",
         step3Body="Klicke auf Beitritt anflüstern, Einladen oder Details.",
-        controls="SYMBOL: LINKSKLICK öffnet QuickJoin  |  RECHTSKLICK beendet die Überwachung  |  ZIEHEN verschiebt",
-        note="Nur Gruppenangebote werden geprüft. Für neue Suchergebnisse ist ein Klick nötig.",
+        controls="SYMBOL: LINKSKLICK sucht erneut  |  RECHTSKLICK stoppt die Überwachung  |  ZIEHEN verschiebt",
+        note="Gruppenangebote müssen manuell gesucht werden; der öffentliche LFG-Chat wird live überwacht.",
         never="Diese Meldung nicht mehr anzeigen",
         ok="Verstanden!",
         help="Neuigkeiten / Hilfe",
@@ -158,11 +238,11 @@ local introText={
         step1="1. ACTIVA EL MODO MONITOR",
         step1Body="Abre QuickJoin (/qj) y activa el modo Monitor en Ajustes. Elige las actividades, usa los Filtros avanzados para ajustar la búsqueda y pulsa Buscar.",
         step2="2. SIGUE JUGANDO",
-        step2Body="QuickJoin sigue buscando grupos que coincidan en segundo plano mientras juegas y te avisa cuando encuentra uno.",
+        step2Body="QuickJoin supervisa anuncios compatibles y nuevos mensajes de reclutamiento del chat de grupos mientras juegas. Haz clic izquierdo para buscar anuncios otra vez.",
         step3="3. ÚNETE A UN GRUPO",
         step3Body="Pulsa Susurrar para unirte, Invitar o Detalles.",
-        controls="ICONO: CLIC IZQUIERDO abre QuickJoin  |  DERECHO detiene la búsqueda  |  ARRASTRAR mueve",
-        note="Solo se revisan anuncios de grupos. Una nueva búsqueda requiere un clic.",
+        controls="ICONO: CLIC IZQUIERDO vuelve a buscar  |  DERECHO detiene la búsqueda  |  ARRASTRAR mueve",
+        note="Los anuncios requieren búsqueda manual; los mensajes públicos del chat se reciben en directo.",
         never="No volver a mostrar este mensaje",
         ok="¡Entendido!",
         help="Novedades / Ayuda",
@@ -175,11 +255,11 @@ local introText={
         step1="1. ACTIVA EL MODO MONITOR",
         step1Body="Abre QuickJoin (/qj) y activa el modo Monitor en Configuración. Elige las actividades, usa los Filtros avanzados para afinar la búsqueda y haz clic en Buscar.",
         step2="2. SIGUE JUGANDO",
-        step2Body="QuickJoin sigue buscando grupos compatibles en segundo plano mientras juegas y te avisa cuando encuentra uno.",
+        step2Body="QuickJoin monitorea anuncios compatibles y nuevos mensajes de reclutamiento del chat de grupos mientras juegas. Haz clic izquierdo para buscar anuncios de nuevo.",
         step3="3. ÚNETE A UN GRUPO",
         step3Body="Haz clic en Susurrar para unirte, Invitar o Detalles.",
-        controls="ÍCONO: CLIC IZQUIERDO abre QuickJoin  |  DERECHO detiene el monitoreo  |  ARRASTRAR mueve",
-        note="Solo se revisan anuncios de grupos. Una nueva búsqueda requiere un clic.",
+        controls="ÍCONO: CLIC IZQUIERDO vuelve a buscar  |  DERECHO detiene el monitoreo  |  ARRASTRAR mueve",
+        note="Los anuncios necesitan búsqueda manual; el chat público se monitorea en tiempo real.",
         never="No volver a mostrar este mensaje",
         ok="¡Entendido!",
         help="Novedades / Ayuda",
@@ -192,11 +272,11 @@ local introText={
         step1="1. ATIVE O MODO MONITOR",
         step1Body="Abra o QuickJoin (/qj) e ative o Modo Monitor em Configurações. Escolha as atividades, use os Filtros Avançados para refinar a busca e clique em Buscar.",
         step2="2. CONTINUE JOGANDO",
-        step2Body="O QuickJoin continua procurando grupos compatíveis em segundo plano enquanto você joga e avisa quando encontra um.",
+        step2Body="O QuickJoin acompanha os anúncios compatíveis e novas mensagens de recrutamento no chat de grupos enquanto você joga. Clique esquerdo para buscar anúncios novamente.",
         step3="3. ENTRE EM UM GRUPO",
         step3Body="Clique em Sussurrar para entrar, Convidar ou Detalhes.",
-        controls="ÍCONE: CLIQUE ESQUERDO abre QuickJoin  |  DIREITO para a busca  |  ARRASTAR move",
-        note="Apenas anúncios de grupos são monitorados. Novas buscas exigem um clique.",
+        controls="ÍCONE: CLIQUE ESQUERDO busca novamente  |  DIREITO para o monitoramento  |  ARRASTAR move",
+        note="As listas precisam de busca manual; as mensagens do chat público chegam automaticamente.",
         never="Não mostrar esta mensagem novamente",
         ok="Entendi!",
         help="Novidades / Ajuda",
@@ -209,11 +289,11 @@ local introText={
         step1="1. ВКЛЮЧИТЕ РЕЖИМ МОНИТОРИНГА",
         step1Body="Откройте QuickJoin (/qj) и включите режим мониторинга в настройках. Выберите занятия, уточните поиск с помощью расширенных фильтров и нажмите «Поиск».",
         step2="2. ПРОДОЛЖАЙТЕ ИГРАТЬ",
-        step2Body="QuickJoin продолжает искать подходящие группы в фоновом режиме, пока вы играете, и уведомляет вас, когда находит совпадение.",
+        step2Body="QuickJoin отслеживает подходящие объявления и новые сообщения о поиске группы в чате LFG, пока вы играете. Щёлкните левой кнопкой, чтобы обновить объявления.",
         step3="3. ПРИСОЕДИНЯЙТЕСЬ К ГРУППЕ",
         step3Body="Нажмите «Шепнуть для вступления», «Пригласить» или «Подробнее».",
-        controls="ЗНАЧОК: ЛЕВАЯ КНОПКА открывает QuickJoin  |  ПРАВАЯ останавливает поиск  |  ПЕРЕТАСКИВАНИЕ перемещает",
-        note="Отслеживаются только объявления групп. Для нового поиска нужно нажать кнопку.",
+        controls="ЗНАЧОК: ЛКМ — повторить поиск  |  ПКМ — остановить отслеживание  |  ПЕРЕТАЩИТЬ — переместить",
+        note="Объявления требуют ручного поиска; публичный чат LFG отслеживается автоматически.",
         never="Больше не показывать это сообщение",
         ok="Понятно!",
         help="Что нового / Справка",
@@ -226,11 +306,11 @@ local introText={
         step1="1. 开启监控模式",
         step1Body="打开 QuickJoin（/qj），然后在“设置”中开启监控模式。选择活动，使用“高级筛选”缩小搜索范围，再点击“搜索”。",
         step2="2. 继续游戏",
-        step2Body="你在游戏时，QuickJoin 会在后台继续寻找符合搜索条件的队伍，并在找到匹配队伍时通知你。",
+        step2Body="QuickJoin 会在游戏时监控匹配的队伍列表和公开组队聊天中的新招募消息。左键点击图标可重新搜索队伍列表。",
         step3="3. 加入队伍",
         step3Body="点击“密语申请加入”、“邀请”或“详情”。",
-        controls="图标：左键打开/关闭 QuickJoin  |  右键停止监控  |  拖动可移动",
-        note="仅监控组队列表。获取新结果需要手动点击搜索。",
+        controls="图标：左键重新搜索  |  右键停止监控  |  拖动可移动",
+        note="队伍列表需手动搜索；监控期间会自动接收公开组队聊天消息。",
         never="不再显示此消息",
         ok="知道了",
         help="更新内容 / 帮助",
@@ -243,11 +323,11 @@ local introText={
         step1="1. 開啟監控模式",
         step1Body="開啟 QuickJoin（/qj），接著在「設定」中開啟監控模式。選擇活動，使用「進階篩選」縮小搜尋範圍，再按下「搜尋」。",
         step2="2. 繼續遊戲",
-        step2Body="你在遊戲時，QuickJoin 會在背景持續尋找符合搜尋條件的隊伍，並在找到符合條件的隊伍時通知你。",
+        step2Body="QuickJoin 會在遊戲時監控符合條件的隊伍列表及公開組隊聊天的新招募訊息。左鍵點擊圖示可重新搜尋隊伍列表。",
         step3="3. 加入隊伍",
         step3Body="按下「密語申請加入」、「邀請」或「詳細資訊」。",
-        controls="圖示：左鍵開啟/關閉 QuickJoin  |  右鍵停止監控  |  拖曳可移動",
-        note="僅監控隊伍列表。取得新結果需要手動按下搜尋。",
+        controls="圖示：左鍵重新搜尋  |  右鍵停止監控  |  拖曳可移動",
+        note="隊伍列表須手動搜尋；監控期間會自動接收公開組隊聊天訊息。",
         never="不再顯示此訊息",
         ok="知道了",
         help="更新內容 / 說明",
@@ -260,11 +340,11 @@ local introText={
         step1="1. 모니터 모드 켜기",
         step1Body="QuickJoin(/qj)을 열고 설정에서 모니터 모드를 켜세요. 활동을 선택하고 고급 필터로 검색 조건을 조정한 다음 검색을 누르세요.",
         step2="2. 계속 플레이하기",
-        step2Body="게임을 하는 동안 QuickJoin이 백그라운드에서 조건에 맞는 파티를 계속 찾고, 일치하는 파티를 발견하면 알려줍니다.",
+        step2Body="QuickJoin이 플레이 중 일치하는 파티 목록과 공개 파티 찾기 채팅의 새 모집 글을 감시합니다. 아이콘 좌클릭으로 파티 목록을 다시 검색할 수 있습니다.",
         step3="3. 파티 참여하기",
         step3Body="참여 귓속말, 초대 또는 상세 정보를 누르세요.",
-        controls="아이콘: 왼쪽 클릭으로 QuickJoin 열기/닫기  |  오른쪽 클릭으로 모니터 중지  |  드래그로 이동",
-        note="파티 목록만 확인합니다. 새 검색은 직접 눌러야 합니다.",
+        controls="아이콘: 좌클릭으로 다시 검색  |  우클릭으로 모니터 중지  |  드래그로 이동",
+        note="파티 목록은 수동 검색이 필요하지만 공개 파티 채팅은 자동으로 수신합니다.",
         never="다시 표시하지 않기",
         ok="확인",
         help="새로운 기능 / 도움말",
@@ -273,6 +353,24 @@ local introText={
 }
 
 -- All popup text follows the QuickJoin language selector; player-authored titles remain unchanged.
+-- Source indicators are localized separately from Blizzard's group listing UI.
+local chatUI={
+    enUS={source="LFG CHAT",lfm="Group recruiting",lfg="Player looking for group",roles="Mentioned roles",unknown="Composition not verified",age="Chat post: %ds old",details="CHAT MESSAGE",members="Chat posts do not provide a verified roster",waiting="Watching LFG Chat and Group Listings",hint="LFG Chat live · Group Listings: click to search"},
+    frFR={source="CHAT RDG",lfm="Groupe recrute",lfg="Joueur cherche un groupe",roles="Rôles mentionnés",unknown="Composition non vérifiée",age="Message : il y a %d s",details="MESSAGE DU CHAT",members="Le chat ne confirme pas les membres",waiting="Chat RdG et annonces surveillés",hint="Chat RdG en direct · Annonces : cliquer pour chercher"},
+    deDE={source="LFG-CHAT",lfm="Gruppe sucht Mitglieder",lfg="Spieler sucht Gruppe",roles="Erwähnte Rollen",unknown="Besetzung nicht bestätigt",age="Chat-Nachricht: %ds alt",details="CHAT-NACHRICHT",members="Chatbeiträge enthalten keine bestätigte Gruppe",waiting="LFG-Chat und Gruppenangebote im Blick",hint="LFG-Chat live · Gruppenangebote per Klick suchen"},
+    esES={source="CHAT DE GRUPOS",lfm="Grupo reclutando",lfg="Jugador busca grupo",roles="Roles mencionados",unknown="Composición sin verificar",age="Chat: hace %d s",details="MENSAJE DEL CHAT",members="El chat no confirma los miembros",waiting="Escuchando chat y anuncios",hint="Chat en vivo · Anuncios: buscar con un clic"},
+    esMX={source="CHAT DE GRUPOS",lfm="Grupo reclutando",lfg="Jugador busca grupo",roles="Roles mencionados",unknown="Composición sin verificar",age="Chat: hace %d s",details="MENSAJE DEL CHAT",members="El chat no confirma los integrantes",waiting="Escuchando chat y anuncios",hint="Chat en vivo · Anuncios: buscar con un clic"},
+    ptBR={source="CHAT DE GRUPOS",lfm="Grupo recrutando",lfg="Jogador procura grupo",roles="Funções mencionadas",unknown="Composição não verificada",age="Chat: há %d s",details="MENSAGEM DO CHAT",members="O chat não confirma integrantes",waiting="Monitorando chat e grupos",hint="Chat ao vivo · Grupos: clique para buscar"},
+    ruRU={source="ЧАТ ПОИСКА",lfm="Группа набирает",lfg="Игрок ищет группу",roles="Упомянутые роли",unknown="Состав не подтверждён",age="Сообщение: %d с назад",details="СООБЩЕНИЕ",members="Состав группы в чате не подтверждён",waiting="Поиск в чате и списках",hint="Чат LFG в реальном времени · Объявления: поиск вручную"},
+    zhCN={source="组队聊天",lfm="队伍招募",lfg="玩家寻队",roles="提及职责",unknown="队伍配置未核实",age="聊天：%d秒前",details="聊天消息",members="聊天消息无法验证队伍成员",waiting="监控聊天与队伍列表",hint="实时组队聊天 · 列表需点击搜索"},
+    zhTW={source="組隊聊天",lfm="隊伍招募",lfg="玩家尋隊",roles="提及職責",unknown="隊伍配置未核實",age="聊天：%d秒前",details="聊天訊息",members="聊天訊息無法驗證隊伍成員",waiting="監控聊天與隊伍列表",hint="即時組隊聊天 · 列表需點擊搜尋"},
+    koKR={source="파티 채팅",lfm="파티 모집 중",lfg="파티를 찾는 플레이어",roles="언급된 역할",unknown="파티 구성 확인 불가",age="채팅: %d초 전",details="채팅 메시지",members="채팅 글로는 파티 인원을 확인할 수 없습니다",waiting="파티 채팅 및 목록 감시 중",hint="실시간 파티 채팅 · 목록은 클릭하여 검색"},
+}
+local function ChatText(key)
+    local row=chatUI[MonitorLanguage()] or chatUI.enUS
+    return row[key] or chatUI.enUS[key]
+end
+
 local popupText={
     enUS={
         found="GROUP FOUND",
@@ -317,8 +415,9 @@ local popupText={
         toolAge="Last manual search: %ds ago",
         toolPending="Waiting for the clicked search results...",
         toolNoPoll="New server searches require a player click.",
-        toolLeft="Left-click: open / close addon · Drag: move",
+        toolLeft="Left-click: search again · Drag: move",
         toolRight="Right-click: stop monitoring",
+        whispered="WHISPERED",
     },
     frFR={
         found="GROUPE TROUVÉ",
@@ -363,8 +462,9 @@ local popupText={
         toolAge="Dernière recherche : il y a %d s",
         toolPending="En attente des résultats de la recherche...",
         toolNoPoll="Une nouvelle recherche nécessite un clic.",
-        toolLeft="Clic gauche : ouvrir QuickJoin · Glisser : déplacer",
+        toolLeft="Clic gauche : relancer la recherche · Glisser : déplacer",
         toolRight="Clic droit : arrêter la surveillance",
+        whispered="CHUCHOTÉ",
     },
     deDE={
         found="GRUPPE GEFUNDEN",
@@ -409,8 +509,9 @@ local popupText={
         toolAge="Letzte Suche vor %d s",
         toolPending="Warte auf die Suchergebnisse...",
         toolNoPoll="Neue Suchen erfordern einen Klick.",
-        toolLeft="Linksklick: QuickJoin öffnen · Ziehen: verschieben",
+        toolLeft="Linksklick: erneut suchen · Ziehen: verschieben",
         toolRight="Rechtsklick: Überwachung stoppen",
+        whispered="ANGEFLÜSTERT",
     },
     esES={
         found="GRUPO ENCONTRADO",
@@ -455,8 +556,9 @@ local popupText={
         toolAge="Última búsqueda: hace %d s",
         toolPending="Esperando los resultados...",
         toolNoPoll="Para buscar otra vez debes hacer clic.",
-        toolLeft="Clic izquierdo: abrir QuickJoin · Arrastrar: mover",
+        toolLeft="Clic izquierdo: volver a buscar · Arrastrar: mover",
         toolRight="Clic derecho: detener monitoreo",
+        whispered="SUSURRADO",
     },
     esMX={
         found="GRUPO ENCONTRADO",
@@ -501,8 +603,9 @@ local popupText={
         toolAge="Última búsqueda: hace %d s",
         toolPending="Esperando los resultados...",
         toolNoPoll="Para buscar otra vez debes hacer clic.",
-        toolLeft="Clic izquierdo: abrir QuickJoin · Arrastrar: mover",
+        toolLeft="Clic izquierdo: volver a buscar · Arrastrar: mover",
         toolRight="Clic derecho: detener monitoreo",
+        whispered="SUSURRADO",
     },
     ptBR={
         found="GRUPO ENCONTRADO",
@@ -547,8 +650,9 @@ local popupText={
         toolAge="Última busca há %d s",
         toolPending="Aguardando resultados da busca...",
         toolNoPoll="Uma nova busca requer um clique.",
-        toolLeft="Clique esquerdo: abrir QuickJoin · Arrastar: mover",
+        toolLeft="Clique esquerdo: pesquisar novamente · Arrastar: mover",
         toolRight="Clique direito: parar monitoramento",
+        whispered="SUSSURRADO",
     },
     ruRU={
         found="ГРУППА НАЙДЕНА",
@@ -593,8 +697,9 @@ local popupText={
         toolAge="Последний поиск: %d с назад",
         toolPending="Ожидание результатов поиска...",
         toolNoPoll="Для нового поиска нужен щелчок.",
-        toolLeft="ЛКМ: открыть QuickJoin · Перетащить: переместить",
+        toolLeft="ЛКМ: повторить поиск · Перетащить: переместить",
         toolRight="ПКМ: остановить поиск",
+        whispered="НАПИСАЛИ",
     },
     zhCN={
         found="找到队伍",
@@ -639,8 +744,9 @@ local popupText={
         toolAge="上次搜索：%d 秒前",
         toolPending="正在等待搜索结果...",
         toolNoPoll="新搜索需要玩家点击。",
-        toolLeft="左键：打开 QuickJoin · 拖动：移动",
+        toolLeft="左键：重新搜索 · 拖动：移动",
         toolRight="右键：停止监控",
+        whispered="已密语",
     },
     zhTW={
         found="找到隊伍",
@@ -685,8 +791,9 @@ local popupText={
         toolAge="上次搜尋：%d 秒前",
         toolPending="正在等待搜尋結果...",
         toolNoPoll="新搜尋需要玩家點擊。",
-        toolLeft="左鍵：開啟 QuickJoin · 拖曳：移動",
+        toolLeft="左鍵：重新搜尋 · 拖曳：移動",
         toolRight="右鍵：停止監控",
+        whispered="已密語",
     },
     koKR={
         found="그룹 발견",
@@ -731,11 +838,12 @@ local popupText={
         toolAge="마지막 검색: %d초 전",
         toolPending="검색 결과를 기다리는 중...",
         toolNoPoll="새 검색에는 직접 클릭이 필요합니다.",
-        toolLeft="좌클릭: QuickJoin 열기 · 드래그: 이동",
+        toolLeft="좌클릭: 다시 검색 · 드래그: 이동",
         toolRight="우클릭: 모니터 중지",
+        whispered="귓속말 완료",
     },
 }
-local function MonitorLanguage()
+MonitorLanguage = function()
     local locale=ForeverQuickJoinLocale
     if locale and type(locale.Current)=="function" then
         local _,effective=locale.Current()
@@ -833,7 +941,7 @@ local function Backdrop(frame)
     frame:SetBackdropBorderColor(.57,.46,.24,.95)
 end
 -- Sound plays exactly once for each player-initiated Monitor Mode search,
--- whether launched through QuickJoin Search or the orb's right click.
+-- whether launched through QuickJoin Search or a floating-icon left-click.
 -- Match notifications and result updates are always silent.
 local function Notify()
     if DB and DB.sound then PlayNotifySound(SOUND_ID,8458) end
@@ -1099,12 +1207,9 @@ end
 UpdateIndicator = function()
     if not indicator then return end
     local enabled=DB and DB.enabledOnSearch==true
-    if active and verifiedAt and Now()-verifiedAt>=SEARCH_FRESH_SECONDS then
-        active=false;awaitingResults=false
-        -- Expired results are not a live search. Remove the floating controls.
-        if context then context:Hide() end
-        if popup then popup:Hide() end
-    end
+    -- Snapshot age is NOT a session stop condition. A timed search cannot
+    -- legally re-query Blizzard, so the UI marks stale data and waits for
+    -- a user click while keeping the monitoring controls alive.
     local listening=enabled and active==true
     indicator:SetShown(listening)
     if not listening then
@@ -1122,6 +1227,8 @@ UpdateIndicator = function()
     end
 
 end
+-- Both sources share a ranked queue; public LFG Chat posts have no verified
+-- party composition and are deliberately never assigned an invented roster.
 -- Group listings are filtered by Matches() before joining this queue.
 -- A relevant support role takes precedence over party size, with stable
 -- deterministic tie-breaking when compositions and party sizes are equal.
@@ -1140,6 +1247,13 @@ local function MonitorPlayerRole()
     return "DAMAGER" -- known default; unassigned users see DPS-oriented ordering
 end
 local function RolePriority(m,playerRole)
+    -- Recruitment text can suggest a vacancy but never proves a party roster.
+    -- Put relevant LFM chat ads above unrelated/unverified posts, still behind
+    -- verified Group Listings with actual complementary support-role counts.
+    if m and m.chat then
+        return m.chatKind=="LFM" and m.chatRequested
+            and m.chatRequested[playerRole] and 0.5 or 0
+    end
     local counts=m and m.roleCounts
     if not counts then return 0 end -- unknown composition is not presumed complete
     local hasTank=(Num(counts.TANK) or 0)>0
@@ -1153,6 +1267,9 @@ local function SortPending()
     local role=MonitorPlayerRole()
     local selected=current
     table.sort(pending,function(a,b)
+        local ac=whisperedLeaders[LeaderKey(a.leader)]~=nil
+        local bc=whisperedLeaders[LeaderKey(b.leader)]~=nil
+        if ac~=bc then return not ac end -- fresh groups above contacted ones
         local ar,br=RolePriority(a,role),RolePriority(b,role)
         if ar~=br then return ar>br end
         local am,bm=Num(a.members) or 0,Num(b.members) or 0
@@ -1170,11 +1287,15 @@ local function SortPending()
     end
     selectedIndex=math.min(math.max(1,selectedIndex),math.max(1,#pending))
 end
+local function RememberWhisper(result)
+    local leader=LeaderKey(result and result.leader)
+    if leader then whisperedLeaders[leader]=Now() end
+end
 local function ShowNext()
     if not active or not popup then return end
     if #pending==0 then
         current=nil
-        if popup:IsShown() then M.RefreshPopup() end
+        if popup:IsShown() then popup:Hide() end
         UpdateIndicator()
         return
     end
@@ -1217,12 +1338,17 @@ local function CycleGroup(direction)
     M.RefreshPopup()
 end
 local function Next()
+    -- X dismisses this listing, regardless of its contacted status.
+    -- It never erases the session's Whispered marker for that leader.
     -- Only dismiss the displayed match. Seen identities prevent result-update
     -- events from bringing it back during the current search snapshot.
     if not current then
         if popup then popup:Hide() end
         return
     end
+    -- Chat posts can be advertised again after ten minutes; Group Listings
+    -- remain dismissed until the next player-initiated native search.
+    dismissed[current.key]=current.chat and Now() or true
     if #pending>0 then table.remove(pending,selectedIndex) end
     current=nil;expanded=false;rosterOffset=0
     if context then context:Hide() end
@@ -1235,19 +1361,60 @@ local function Next()
         UpdateIndicator() -- monitoring stays active, icon remains on screen
     end
 end
-local function Enqueue(result)
+Enqueue = function(result)
     if not active or not result then return end
+    -- Keep contacted listings visible so their disabled Whispered button can
+    -- be reviewed after Search Again. They must not re-trigger chat alerts.
+    local contacted=whisperedLeaders[LeaderKey(result.leader)]~=nil
     local key=result.key
+    if contacted and result.chat then
+        -- Repeated chat ads from one contacted sender update the existing
+        -- reviewable row instead of filling the queue with the same player.
+        for _,existing in ipairs(pending) do
+            if existing.chat and LeaderKey(existing.leader)==LeaderKey(result.leader) then
+                seen[key]=Now()
+                existing.chatAt=result.chatAt
+                existing.chatChannel=result.chatChannel
+                existing.chatKind=result.chatKind
+                existing.chatRequested=result.chatRequested
+                existing.chatRoles=result.chatRoles
+                existing.title=result.title
+                existing.activity=result.activity
+                existing.comment=result.comment
+                if popup and popup:IsShown() and current==existing then M.RefreshPopup() end
+                return
+            end
+        end
+    end
+    local ignored=dismissed[key]
+    if ignored then
+        if result.chat and type(ignored)=="number" and Now()-ignored>=CHAT_TTL then
+            dismissed[key]=nil
+        else
+            return
+        end
+    end
     local time=Now()
     if seen[key] and time-seen[key]<NOTIFY_DEDUP_SECONDS then return end
     seen[key]=time
     if #pending>=MAX_QUEUE then return end
     pending[#pending+1]=result
     if collectingResults then return end
+    local showingContact=current and whisperedLeaders[LeaderKey(current.leader)]~=nil
     SortPending()
     UpdateIndicator()
-    if not current then ShowNext()
-    elseif popup and popup:IsShown() then M.RefreshPopup() end
+    if not current and not contacted then
+        ShowNext()
+    elseif showingContact and not contacted then
+        -- A genuinely new group must not remain hidden behind a contacted
+        -- listing while the monitor is live.
+        for i,m in ipairs(pending) do
+            if m==result then selectedIndex=i;break end
+        end
+        ShowNext()
+    elseif popup and popup:IsShown() then
+        M.RefreshPopup()
+    end
 end
 local function ActivateResult(id)
     local info=NativeInfo(id)
@@ -1340,6 +1507,289 @@ local function UpdatedResult(id)
     ActivateResult(id) -- newer matching result; dedupe by listing identity
 end
 
+
+-- LIVE PUBLIC LFG CHAT -----------------------------------------------------
+-- We watch the same three public event families used by QuickJoin's LFG Chat.
+-- This module never joins a channel, polls a server, or records posts in SV.
+-- A post's roles, party size and membership are *not* verifiable Blizzard data.
+local CHAT_INSTANCES={
+    {"Scarlet Monastery",{"scarlet monastery","sm cath","sm gy","sm arm","sm lib","sm","cathedral"}},
+    {"Shadowfang Keep",{"shadowfang keep","shadowfang","sfk"}},
+    {"Deadmines",{"deadmines","vancleef","vc","dm westfall"}},
+    {"Wailing Caverns",{"wailing caverns","wc"}},
+    {"Ragefire Chasm",{"ragefire chasm","rfc"}},
+    {"Blackfathom Deeps",{"blackfathom deeps","bfd"}},
+    {"Stockades",{"stockades","stockade","stocks"}},
+    {"Gnomeregan",{"gnomeregan","gnomer"}},
+    {"Razorfen Kraul",{"razorfen kraul","rfk"}},
+    {"Razorfen Downs",{"razorfen downs","rfd"}},
+    {"Uldaman",{"uldaman","ulda"}},
+    {"Zul'Farrak",{"zul farrak","zulfarrak","zf"}},
+    {"Maraudon",{"maraudon","mara"}},
+    {"Sunken Temple",{"sunken temple","temple of atal","atal hakkar"}},
+    {"Blackrock Depths",{"blackrock depths","brd"}},
+    {"Blackrock Spire",{"blackrock spire","lbrs","ubrs"}},
+    {"Dire Maul",{"dire maul","dme","dmw","dmn","dm east","dm north"}},
+    {"Stratholme",{"stratholme","strat"}},
+    {"Scholomance",{"scholomance","scholo"}},
+    {"Onyxia",{"onyxia","ony"}},
+    {"Molten Core",{"molten core","mc"}},
+    {"Zul'Gurub",{"zul gurub","zulgurub","zg"}},
+    {"Blackwing Lair",{"blackwing lair","bwl"}},
+    {"Ahn'Qiraj",{"ahn qiraj","aq20","aq40"}},
+    {"Naxxramas",{"naxxramas","naxx"}},
+    {"Hall of Thanes",{"hall of thanes"}},
+    {"Ruins of Lordaeron",{"ruins of lordaeron"}},
+    {"Excavation Site",{"excavation site"}},
+    {"City of Dalaran",{"city of dalaran"}},
+    {"The Drowned City",{"drowned city"}},
+    {"Alcaz Prison",{"alcaz prison"}},
+    {"Blackmaw Hold",{"blackmaw hold"}},
+    {"Shaper's Terrace",{"shapers terrace","shaper's terrace"}},
+    {"Hyjal Summit",{"hyjal summit"}},
+    {"Barrow Deeps",{"barrow deeps"}},
+    {"Krol'dok Stronghold",{"kroldok stronghold","krol'dok stronghold"}},
+}
+local CHAT_RAIDS={Onyxia=true,["Molten Core"]=true,["Zul'Gurub"]=true,
+    ["Blackwing Lair"]=true,["Ahn'Qiraj"]=true,Naxxramas=true,["Hyjal Summit"]=true}
+local function ChatDisplay(value)
+    value=Str(value) or ""
+    for _=1,3 do
+        local reduced,n=value:gsub("||","|")
+        value=reduced
+        if n==0 then break end
+    end
+    value=value:gsub("|[Hh][^|]-|[hH](.-)|[hH]","%1")
+    value=value:gsub("|[cC]%x%x%x%x%x%x%x%x","")
+        :gsub("|[rR]",""):gsub("|[Tt][^|]-|[tT]","")
+        :gsub("|[Hh][^|%s]*",""):gsub("|[hH]","")
+        :gsub("[%c]"," ")
+    return value
+end
+local function ChatNorm(s)
+    s=ChatDisplay(s):lower():gsub("[%p]"," "):gsub("%s+"," ")
+    return " "..s.." "
+end
+local function HasWord(s,w)
+    local needle=ChatNorm(w)
+    -- Trim normalization sentinels and require boundaries on both sides.
+    return s:find(needle,1,true)~=nil
+end
+local function AnyWord(s,values)
+    for _,word in ipairs(values) do if HasWord(s,word) then return true end end
+    return false
+end
+local function ChatClassify(message)
+    if not Str(message) or #message>1024 then return nil end
+    local raw=ChatDisplay(message)
+    local words=ChatNorm(raw)
+    local hasQuestLink=message:find("|Hquest:",1,true)~=nil
+        or message:find("||Hquest:",1,true)~=nil
+    local lfm=AnyWord(words,{"lfm","lf1m","lf2m","lf3m","lf4m","lf5m",
+        "looking for more","looking for members","need tank","need healer","need heal",
+        "need heals","need dps","looking for tank","looking for healer",
+        "looking for dps","group for","forming group","recrute","recrutamos",
+        "buscamos","suche leute"})
+        or words:find(" need%s+%d*%s*tank%s")~=nil
+        or words:find(" need%s+%d*%s*heal%w*%s")~=nil
+        or words:find(" need%s+%d*%s*dps%s")~=nil
+    local lfg=AnyWord(words,{"lfg","looking for group","looking for a group",
+        "anyone running","anyone doing","cherche groupe","busco grupo",
+        "procuro grupo","suche gruppe"})
+    if not lfm and not lfg then return nil end
+    if AnyWord(words,{"wts","wtb","wtt","guild recruitment","selling", "buying",
+        "boosting","boosts","portal","summons"}) and not (HasWord(words,"lfm") or HasWord(words,"lfg")) then
+        return nil
+    end
+    if AnyWord(words,{"guild","guildmates","recruiting for guild"}) and
+        not (HasWord(words,"lfm") or HasWord(words,"lfg")) then return nil end
+    local activity,category="Unspecified","unspecified"
+    for _,entry in ipairs(CHAT_INSTANCES) do
+        if AnyWord(words,entry[2]) then
+            activity=entry[1]
+            category=CHAT_RAIDS[activity] and "raid" or "dungeon"
+            break
+        end
+    end
+    if category=="unspecified" and AnyWord(words,{"dungeon","dungeons","instance","instances"}) then
+        activity="Any dungeon";category="dungeon"
+    elseif category=="unspecified" and AnyWord(words,{"raid","raids"}) then
+        activity="Any raid";category="raid"
+    end
+    if category=="unspecified" and (hasQuestLink
+        or AnyWord(words,{"quest","quests","questing","escort","elite","group quest","zone","grinding"})) then
+        activity="Quests / Zones";category="quest"
+    end
+    return {kind=lfm and "LFM" or "LFG",activity=activity,category=category,
+        words=words,display=raw,original=message}
+end
+local function ChatRequestedRole(words,role)
+    local terms=role=="TANK" and {"tank","tanks"}
+        or role=="HEALER" and {"healer","healers","heal","heals"}
+        or {"dps","damage"}
+    for _,term in ipairs(terms) do
+        if words:find(" need%s+%d*%s*"..term.."%s")
+            or words:find(" lf%s+%d*%s*"..term.."%s")
+            or words:find(" looking for%s+%d*%s*"..term.."%s")
+            or words:find(" lf%d+m%s+"..term.."%s")
+            or words:find(" %d+%s+"..term.."%s") then return true end
+    end
+    return false
+end
+local function ChatSelectedActivity(entry)
+    if not scope then return nil end
+    local ids=scope.activityIDs or {}
+    if #ids==0 then
+        -- Keep category selection even without explicit activity IDs.
+        local id=Num(scope.categoryID)
+        if id and id>0 then
+            if id==2 and entry.category~="dungeon" then return nil end
+            if id==3 and entry.category~="raid" then return nil end
+            if id==4 and entry.category~="quest" then return nil end
+        end
+        return entry.category~="unspecified" and entry.activity or nil
+    end
+    for _,id in ipairs(ids) do
+        local a=ActivityInfo(id)
+        if a then
+            local name=Str(a.fullName) or Str(a.name) or Str(a.shortName) or Str(a.zoneName)
+            local category=Num(a.categoryID)
+            if name then
+                local names={name}
+                if Str(a.shortName) then names[#names+1]=a.shortName end
+                if Str(a.zoneName) then names[#names+1]=a.zoneName end
+                local lower=name:lower()
+                for _,known in ipairs(CHAT_INSTANCES) do
+                    if lower:find(known[1]:lower(),1,true) then
+                        -- Sub-zones of Scarlet Monastery must not all match "SM".
+                        local qualifier=lower:find("cathedral",1,true) and {"sm cath","cathedral"}
+                            or lower:find("graveyard",1,true) and {"sm gy","graveyard"}
+                            or lower:find("armory",1,true) and {"sm arm","armory"}
+                            or lower:find("library",1,true) and {"sm lib","library"}
+                        for _,alias in ipairs(qualifier or known[2]) do names[#names+1]=alias end
+                    end
+                end
+                -- For an unqualified activity, prefer recognized canonical name.
+                if entry.category=="quest" and (category==4 or lower:find("quest",1,true)
+                    or lower:find("zone",1,true)) then return entry.activity end
+                for _,candidate in ipairs(names) do
+                    if HasWord(entry.words,candidate) then return name end
+                end
+            end
+        end
+    end
+    return nil -- cannot prove advertised activity belongs to selection
+end
+local function ChatPasses(entry)
+    if not active or not scope or not entry or not SafeName(entry.sender) then return nil end
+    if type(UnitName)=="function" then
+        local selfName=SafeName(UnitName("player"))
+        if selfName and entry.sender:lower()==selfName:lower() then return nil end
+    end
+    -- Public LFG posts do not carry a verified roster, vacancy count,
+    -- classes, playstyle, or group size. The structured Group Listings
+    -- must still respect ALL advanced composition and exclusion filters.
+    -- Chat notifications intentionally use only selected category/activities.
+    return ChatSelectedActivity(entry)
+end
+local function ReceiveChat(event,message,sender,_,channelName,_,_,_,_,baseName)
+    -- This event handler does not modify QuickJoin's own public-chat inbox.
+    -- All state stays in-memory, and only monitor-active messages are eligible.
+    if not active or not (DB and DB.enabledOnSearch) then return end
+    message=Str(message)
+    sender=SafeName(sender)
+    if not message or not sender then return end
+    local entry=ChatClassify(message)
+    if not entry then return end
+    entry.sender=sender
+    local activity=ChatPasses(entry)
+    if not activity then return end
+    local channel=event=="CHAT_MSG_SAY" and "Say"
+        or event=="CHAT_MSG_YELL" and "Yell"
+        or Str(baseName) or Str(channelName) or "Public"
+    channel=channel:gsub("^%d+%.%s*",""):sub(1,40)
+    local key="chat:"..sender:lower()..":"..entry.original:lower():gsub("%s+"," ")
+    local roleHints,requested={},{}
+    for _,name in ipairs({"TANK","HEALER","DAMAGER"}) do
+        if ChatRequestedRole(entry.words,name) then
+            requested[name]=true
+            roleHints[#roleHints+1]=name=="DAMAGER" and "DPS" or name
+        end
+    end
+    chatObserved=chatObserved+1
+    local before=seen[key]
+    Enqueue({key=key,id=nil,chat=true,chatKind=entry.kind,
+        chatChannel=channel,chatAt=Now(),leader=sender,activity=activity,
+        title=activity,comment=entry.original,chatRoles=table.concat(roleHints,", "),
+        chatRequested=requested,members=nil,cap=nil,roleCounts=nil,roster={},synthetic=false})
+    if not before and seen[key] then
+        chatMatched=chatMatched+1
+        -- One gentle notification at most every 15 seconds despite chat spam.
+        if not whisperedLeaders[LeaderKey(sender)] and DB.sound
+            and not (DB.quietCombat and IsCombat())
+            and Now()-chatAlertAt>=15 then
+            chatAlertAt=Now()
+            PlayNotifySound(47615,47615)
+        end
+    end
+end
+local function PruneExpiredChat()
+    if not active or #pending==0 then return end
+    local removed=false
+    for i=#pending,1,-1 do
+        local m=pending[i]
+        local mismatch=false
+        if m.chat and m.comment and Now()-m.chatAt<CHAT_TTL then
+            local classification=ChatClassify(m.comment)
+            if classification then
+                classification.sender=m.leader
+                mismatch=not ChatPasses(classification)
+            else
+                mismatch=true
+            end
+        end
+        if m.chat and (not m.chatAt or Now()-m.chatAt>=CHAT_TTL or mismatch) then
+            if m==current then current=nil end
+            if i<selectedIndex then selectedIndex=selectedIndex-1 end
+            table.remove(pending,i)
+            removed=true
+        end
+    end
+    if removed then
+        selectedIndex=math.min(math.max(1,selectedIndex),math.max(1,#pending))
+        if not current and #pending>0 then ShowNext()
+        elseif #pending==0 and popup then popup:Hide()
+        elseif popup and popup:IsShown() then M.RefreshPopup() end
+    end
+end
+
+local function RefreshCachedResults()
+    -- This is a READ-ONLY check of Blizzard's EXISTING client cache. It must
+    -- NEVER invoke C_LFGList.Search, simulate an input, or claim the server
+    -- was queried. Only the player's click makes a fresh server search.
+    if not active or awaitingResults or not verifiedAt
+        or Now()-verifiedAt>=SEARCH_FRESH_SECONDS then return end
+    if not (C_LFGList and type(C_LFGList.GetFilteredSearchResults)=="function") then return end
+    local ok,_,ids=pcall(C_LFGList.GetFilteredSearchResults)
+    ids=ok and Readable(ids) or nil
+    if type(ids)~="table" then return end
+    local changed=0
+    for _,value in ipairs(ids) do
+        local id=Num(value)
+        if id and id>0 then
+            -- New IDs are only accepted from the same still-fresh client-side
+            -- snapshot; matching listings are checked against saved filters.
+            if searchIDs[id] then
+                UpdatedResult(id)
+            elseif changed<MAX_QUEUE then
+                searchIDs[id]=verifiedAt
+                ActivateResult(id)
+                changed=changed+1
+            end
+        end
+    end
+end
+
 -- PRIMARY ACTIONS ------------------------------------------------------------
 local function RoleLabel()
     local value=ForeverQuickJoinParty and ForeverQuickJoinParty.RoleFor
@@ -1383,7 +1833,10 @@ local function Fresh(m)
 end
 local function Whisper()
     local m=current
-    if not Fresh(m) then return end
+    if not m or whisperedLeaders[LeaderKey(m.leader)]
+        or (not m.chat and not Fresh(m)) then return end
+    if m.chat and (not active or not m.chatAt or Now()-m.chatAt>=CHAT_TTL
+        or not SafeName(m.leader)) then return end
     if C_ChatInfo and type(C_ChatInfo.InChatMessagingLockdown)=="function"
         and C_ChatInfo.InChatMessagingLockdown() then
         Print("Chat messaging is locked; whisper not sent.");return
@@ -1399,7 +1852,18 @@ local function Whisper()
             return
         end
     end
-    local message=WhisperMessage(m)
+    local message
+    if m.chat and m.chatKind=="LFG" then
+        local L=ForeverQuickJoinLocale
+        if L and type(L.ChatLFGReply)=="function" then
+            local ok,v=pcall(L.ChatLFGReply,m.activity)
+            if ok then message=Str(v) end
+        end
+        message=message or ("I saw your LFG post for "..m.activity
+            ..". Are you still looking for a group?")
+    else
+        message=WhisperMessage(m)
+    end
     if message=="" or #message>255 then
         Print("Whisper template is empty or exceeds the 255-byte limit.");return
     end
@@ -1411,20 +1875,38 @@ local function Whisper()
     -- Protected messaging only in this direct button OnClick path.
     sender(message,"WHISPER",nil,m.leader)
     attempts[m.leader]=Now()
-    if ForeverQuickJoinApplications and type(ForeverQuickJoinApplications.TrackSent)=="function" then
+    if not m.chat and ForeverQuickJoinApplications
+        and type(ForeverQuickJoinApplications.TrackSent)=="function" then
         m.applicationRecord=m.applicationRecord or {leader=m.leader,at=Now()}
-        -- Keep the existing My Applications reply workflow active.
         pcall(ForeverQuickJoinApplications.TrackSent,m.applicationRecord,NativeInfo(m.id) or {},message)
     end
-    Print("Whisper submitted to "..m.leader.." (delivery not confirmed).")
-    Next()
+    RememberWhisper(m) -- only after the player explicitly sends a whisper
+    Print("Whisper submitted to "..m.leader.." (delivery not confirmed). Marked Whispered for this session.")
+    -- Keep the listing on screen: disable/grey its existing Whisper button.
+    -- This also updates any other queued adverts from the same leader.
+    SortPending()
+    for i,listing in ipairs(pending) do
+        if listing==m then selectedIndex=i;break end
+    end
+    if popup and popup:IsShown() then M.RefreshPopup() end
 end
 local function Invite()
     local m=current
-    local info=Fresh(m)
-    if not info then return end
-    if Num(info.numMembers)~=1 then
-        Print("Invite is available only for a solo listed group leader.");return
+    if not m then return end
+    local info
+    if m.chat then
+        -- LFG poster is a player seeking a group, not a verified listing leader.
+        if not active or m.chatKind~="LFG" or not m.chatAt
+            or Now()-m.chatAt>=CHAT_TTL then return end
+        if type(InCombatLockdown)=="function" and InCombatLockdown() then
+            Print("Leave combat before inviting.");return
+        end
+    else
+        info=Fresh(m)
+        if not info then return end
+        if Num(info.numMembers)~=1 then
+            Print("Invite is available only for a solo listed group leader.");return
+        end
     end
     if type(IsInGroup)=="function" and IsInGroup() then
         local leader=(type(UnitIsGroupLeader)=="function" and UnitIsGroupLeader("player"))
@@ -1595,44 +2077,62 @@ function M.RefreshPopup()
     local m=current
     local age=verifiedAt and math.floor(Now()-verifiedAt) or nil
     if m then
-        header:SetText(PopText("found"))
+        header:SetText(m.chat and ChatText("source") or PopText("found"))
         local activity=m.activityIDs and #m.activityIDs>0
             and ActivityList({activityIDs=m.activityIDs}) or m.activity
         activityText:SetText(Clean(m.title or activity,90))
-        subtext:SetText(Clean(activity,90))
-        local counts=m.roleCounts
-        local composition=counts and (PopText("tank").." "..counts.TANK.."  "
-            ..PopText("healer").." "..counts.HEALER.."  DPS "..counts.DAMAGER)
-            or (m.role=="Composition unavailable" and PopText("composition") or m.role)
-        roleText:SetText(tostring(m.members).."/"..tostring(m.cap or "?").." "
-            ..PopText("members").."  ·  "..Clean(composition,70))
+        if m.chat then
+            subtext:SetText((m.chatKind=="LFM" and ChatText("lfm") or ChatText("lfg"))
+                .." · "..Clean(m.chatChannel,55))
+            roleText:SetText(Clean(m.leader,70).." · "
+                ..(m.chatRoles~="" and (ChatText("roles")..": "..Clean(m.chatRoles,55))
+                    or ChatText("unknown")))
+        else
+            subtext:SetText(Clean(activity,90))
+            local counts=m.roleCounts
+            local composition=counts and (PopText("tank").." "..counts.TANK.."  "
+                ..PopText("healer").." "..counts.HEALER.."  DPS "..counts.DAMAGER)
+                or (m.role=="Composition unavailable" and PopText("composition") or m.role)
+            roleText:SetText(tostring(m.members).."/"..tostring(m.cap or "?").." "
+                ..PopText("members").."  ·  "..Clean(composition,70))
+        end
     else
         header:SetText(PopText("monitor"))
         activityText:SetText(PopText("noMatches"))
-        subtext:SetText(active and PopText("waitingGroup") or PopText("stopped"))
+        subtext:SetText(active and ChatText("waiting") or PopText("stopped"))
         roleText:SetText(PopText("choose"))
     end
-    queueText:SetText(#pending>1 and PopText("browse") or PopText("listings"))
-    freshnessText:SetText((active and awaitingResults) and PopText("waitingResults") or
+    queueText:SetText(#pending>1 and PopText("browse") or (m and m.chat and ChatText("source") or PopText("listings")))
+    freshnessText:SetText((m and m.chat and (ChatText("age")):format(math.max(0,math.floor(Now()-m.chatAt))))
+        or (active and awaitingResults) and PopText("waitingResults") or
         (active and age and age<SEARCH_FRESH_SECONDS and PopFmt("snapshot",age)) or
-        PopText("refresh"))
-    descriptionText:SetText(PopText("desc").."\n"..Clean(m and m.comment or PopText("noDesc"),280))
-    whisperButton:SetEnabled(m~=nil and not m.synthetic and active and age~=nil and age<SEARCH_FRESH_SECONDS)
-    inviteButton:SetEnabled(m~=nil and not m.synthetic and active and age~=nil
-        and age<SEARCH_FRESH_SECONDS and m.members==1)
+        (active and ChatText("hint")) or PopText("refresh"))
+    local rawDescription=m and m.comment or PopText("noDesc")
+    if m and m.chat then rawDescription=ChatDisplay(rawDescription) end
+    descriptionText:SetText((m and m.chat and ChatText("details") or PopText("desc"))
+        .."\n"..Clean(rawDescription,m and m.chat and 450 or 280))
+    local chatFresh=m and m.chat and m.chatAt and Now()-m.chatAt<CHAT_TTL
+    local listingFresh=m and not m.chat and m.id and verifiedAt
+        and Now()-verifiedAt<SEARCH_FRESH_SECONDS and searchIDs[m.id]
+    local alreadyWhispered=m and whisperedLeaders[LeaderKey(m.leader)]~=nil
+    whisperButton:SetEnabled(m~=nil and not alreadyWhispered
+        and not m.synthetic and active and not not (chatFresh or listingFresh))
+    inviteButton:SetEnabled(m~=nil and not m.synthetic and active and
+        (not not (chatFresh and m.chatKind=="LFG" or (listingFresh and m.members==1))))
     expandButton:SetEnabled(m~=nil)
-    if prevGroupButton then prevGroupButton:SetShown(m~=nil and #pending>1) end
-    if nextGroupButton then nextGroupButton:SetShown(m~=nil and #pending>1) end
+    local queueCount=#pending
+    if prevGroupButton then prevGroupButton:SetShown(m~=nil and queueCount>1) end
+    if nextGroupButton then nextGroupButton:SetShown(m~=nil and queueCount>1) end
     if groupPager then
         if m then
-            groupPager:SetText(tostring(math.max(1,selectedIndex)).."/"..tostring(math.max(1,#pending)))
+            groupPager:SetText(tostring(math.max(1,selectedIndex)).."/"..tostring(math.max(1,queueCount)))
             groupPager:SetShown(true)
         else
             groupPager:SetText("")
             groupPager:SetShown(false)
         end
     end
-    whisperButton:SetText(PopText("whisperJoin"))
+    whisperButton:SetText(alreadyWhispered and PopText("whispered") or PopText("whisperJoin"))
     inviteButton:SetText(PopText("invite"))
     expandButton:SetText(expanded and PopText("less") or PopText("details"))
     prevButton:SetText(PopText("previous"))
@@ -1641,14 +2141,15 @@ function M.RefreshPopup()
     if contextWhisper then contextWhisper:SetText(PopText("memberWhisper")) end
     if contextCloseButton then contextCloseButton:SetText(PopText("close")) end
     local details=expanded and m~=nil
-    popup:SetHeight(details and 497 or 159)
+    popup:SetHeight(details and (m.chat and 367 or 497) or 159)
+    if details and m.chat then descriptionText:SetHeight(180) else descriptionText:SetHeight(59) end
     descriptionText:SetShown(details)
-    rosterTitle:SetShown(details)
-    prevButton:SetShown(details)
-    nextButton:SetShown(details)
-    rosterPager:SetShown(details)
-    for _,row in ipairs(rosterRows) do row:SetShown(details) end
-    if details then RenderRoster() end
+    rosterTitle:SetShown(details and not m.chat)
+    prevButton:SetShown(details and not m.chat)
+    nextButton:SetShown(details and not m.chat)
+    rosterPager:SetShown(details and not m.chat)
+    for _,row in ipairs(rosterRows) do row:SetShown(details and not m.chat) end
+    if details and not m.chat then RenderRoster() end
     if PositionPopup then PositionPopup() end
     ApplyTheme()
 end
@@ -1677,8 +2178,9 @@ local function MakePopup()
         if context then context:Hide() end
         M.RefreshPopup()
     end)
-    queueText=Label(popup,"",12,134,143,18,"GameFontDisableSmall")
-    freshnessText=Label(popup,"",160,134,172,18,"GameFontDisableSmall")
+    queueText=Label(popup,"",140,134,1,18,"GameFontDisableSmall")
+    queueText:Hide() -- top pager already handles group browsing
+    freshnessText=Label(popup,"",12,134,318,18,"GameFontDisableSmall")
     descriptionText=Label(popup,"",12,165,318,59,"GameFontHighlightSmall")
     rosterTitle=Label(popup,"",12,233,318,21,"GameFontNormalSmall")
     for i=1,ROW_COUNT do
@@ -1849,23 +2351,17 @@ local function MakeIndicator()
         if popup and popup:IsShown() then PositionPopup() end
     end)
     indicator:SetScript("OnClick",function(self,button)
-        if button=="LeftButton" then
-            if mainWindow then
-                if mainWindow:IsShown() then mainWindow:Hide() else mainWindow:Show() end
-            end
+        if button=="RightButton" then
+            if active then M.Stop(true) end -- stop sound; icon disappears
             return
         end
-        if button~="RightButton" then return end
-        if active then
-            M.Stop(true) -- explicit right-click only
-            return
-        end
-        if not (DB and DB.enabledOnSearch) then return end
+        if button~="LeftButton" or not active or not (DB and DB.enabledOnSearch) then return end
+        -- Left-click always requests another player-initiated search.
         local previous=scope
         local cat=previous and Num(previous.categoryID)
         local activities=previous and previous.activityIDs
         if not cat or type(activities)~="table" or #activities==0 then
-            Print("Configure a Group Finder search in /qj first, then click Search.")
+            Print("No saved Group Finder search. Open /qj, choose an activity, and click Search first.")
             if mainWindow then mainWindow:Show() end
             return
         end
@@ -1873,19 +2369,23 @@ local function MakeIndicator()
             Print("Group Finder search is unavailable on this client.")
             return
         end
-        -- One physical right-click = one restricted native server request.
-        -- No timers, OnUpdate loops or events ever invoke Search().
+        -- One actual left-click = one native Group Finder search request.
+        -- A ticker, callback, or simulated click NEVER invokes Search().
+        -- Snapshot the current advanced filters to respect recent user changes.
+        local settings=ForeverQuickJoinDB or {}
         local newScope={categoryID=cat,activityIDs=Copy(activities,2),
-            filters=Copy(previous.filters,4),advanced=Copy(previous.advanced,4)}
+            filters=Copy(settings.filters or previous.filters or {},4),
+            advanced=Copy(settings.advanced or previous.advanced or {},4)}
         Start(newScope,false)
         orbSearchAttempt=true;orbSearchAt=Now()
         local ok=C_LFGList.Search(cat,0,0,nil,false,nil,activities)
         orbSearchAttempt=false
         if ok==false then
-            M.Stop()
-            Print("WoW declined the search. Open /qj and click Search to retry.")
+            awaitingResults=false
+            UpdateIndicator()
+            Print("WoW declined the search. Monitoring continues; try Search in /qj.")
         else
-            Notify() -- one sound per successful player-initiated orb search
+            Notify() -- one sound per successful player-initiated refresh
         end
     end)
     indicator:SetScript("OnEnter",function(self)
@@ -1893,7 +2393,7 @@ local function MakeIndicator()
         GameTooltip:SetOwner(self,"ANCHOR_LEFT")
         GameTooltip:AddLine(PopText("toolMonitor"),1,.82,.3)
         if active then
-            GameTooltip:AddLine(PopText("toolActive"),.35,1,.46)
+            GameTooltip:AddLine(ChatText("waiting"),.35,1,.46)
             if verifiedAt then
                 GameTooltip:AddLine(PopFmt("toolAge",math.floor(Now()-verifiedAt)),1,1,1)
             else
@@ -1902,7 +2402,7 @@ local function MakeIndicator()
         else
             GameTooltip:AddLine(PopText("toolIdle"),.80,.84,.88)
         end
-        GameTooltip:AddLine(PopText("toolNoPoll"),.95,.79,.40,true)
+        GameTooltip:AddLine(ChatText("hint"),.95,.79,.40,true)
         GameTooltip:AddLine(PopText("toolLeft"),.8,.9,1)
         GameTooltip:AddLine(PopText("toolRight"),.8,.9,1)
         GameTooltip:Show()
@@ -1915,6 +2415,8 @@ end
 function M.Stop(userClicked)
     local shouldSound=active and userClicked==true
     active=false;awaitingResults=false;searchIDs={};collectingResults=false
+    wasGrouped=false;dismissed={}
+    -- Contacted-leader markers survive stop/start; reset only on reload/logout.
     verifiedAt=nil
     if popup then popup:Hide() end
     if context then context:Hide() end
@@ -1935,20 +2437,54 @@ Start = function(manualScope,playSound)
             or Copy((ForeverQuickJoinDB or {}).advanced or {},4),
         implicit=not capture}
     local restarting=active
-    active=true;awaitingResults=true;current=nil;pending={};searchIDs={};collectingResults=false
-    -- Preserve recent seen identities across stop/start to avoid re-alert fatigue.
+    local keepChat,keepDismissed,keepSeen={},{},{}
+    if restarting then
+        for _,m in ipairs(pending) do
+            if m.chat and m.chatAt and Now()-m.chatAt<CHAT_TTL then
+                keepChat[#keepChat+1]=m
+                keepSeen[m.key]=seen[m.key]
+            end
+        end
+        for key,v in pairs(dismissed) do
+            if type(key)=="string" and key:sub(1,5)=="chat:"
+                and type(v)=="number" and Now()-v<CHAT_TTL then
+                keepDismissed[key]=v
+            end
+        end
+    end
+    dismissed=keepDismissed;seen=keepSeen -- refresh finder only; retain live chat
+    if popup then popup:Hide() end
+    if context then context:Hide() end
+    wasGrouped=InGroup()
+    active=true;awaitingResults=true;current=nil;pending=keepChat;searchIDs={};collectingResults=false
+    if not restarting then
+        lfgJoinAttempts=0
+        lfgJoinLastAt=-100000
+        lfgJoinNotBefore=Now()+8
+    end
+    -- Search Again preserves the in-memory Whispered markers.
     expanded=false;rosterOffset=0;selectedIndex=1;verifiedAt=nil;lastUserSearchAt=Now()
     MakePopup();MakeIndicator();UpdateIndicator()
-    if playSound then Notify() end -- QuickJoin Search click; no result sounds.
+    if #pending>0 then SortPending();ShowNext() end
+    if playSound then Notify() end -- QuickJoin Search click.
     if mainWindow then mainWindow:Hide() end
-    Print("Monitor started (Group Listings only). Waiting for the clicked Group Finder search.")
+    Print("Monitor started: LFG Chat live; Group Listings update on each manual Search.")
+    if C_Timer and type(C_Timer.After)=="function" then
+        -- Avoid competing with the core Chat module's on-login join attempt.
+        C_Timer.After(8,function()
+            if active and DB and DB.enabledOnSearch then TryAutoJoinLFG(false) end
+        end)
+    else
+        TryAutoJoinLFG(false)
+    end
     if C_Timer and type(C_Timer.After)=="function" then
         local startAt=lastUserSearchAt
         C_Timer.After(16,function()
             if active and awaitingResults and lastUserSearchAt==startAt then
                 awaitingResults=false
-                M.Stop()
-                Print("Finder search timed out. Reopen QuickJoin and click Search to refresh.")
+                UpdateIndicator()
+                if popup and popup:IsShown() then M.RefreshPopup() end
+                Print("Search timed out. Monitor remains active; click Search to request new listings.")
             end
         end)
     end
@@ -2001,6 +2537,20 @@ local function AttachThemeMenu(win)
             esMX="Modo monitor",ptBR="Modo de monitoramento",ruRU="Режим поиска",
             zhCN="监控模式",zhTW="監控模式",koKR="모니터 모드"}
         local modeLabel=titles[lang] or "Monitor Mode"
+        local joinLabels={
+            enUS="Auto-join LookingForGroup",
+            frFR="Rejoindre automatiquement LookingForGroup",
+            deDE="LookingForGroup automatisch beitreten",
+            esES="Unirse automáticamente a LookingForGroup",
+            esMX="Unirse automáticamente a LookingForGroup",
+            ptBR="Entrar automaticamente em LookingForGroup",
+            ruRU="Автовход в LookingForGroup",
+            zhCN="自动加入 LookingForGroup 频道",
+            zhTW="自動加入 LookingForGroup 頻道",
+            koKR="LookingForGroup 채널 자동 참가",
+        }
+        local actualLang=type(MonitorLanguage)=="function" and MonitorLanguage() or lang
+        local autoJoinLabel=joinLabels[actualLang] or joinLabels.enUS
         local function Radio(label,checked,click)
             local option=menu:CreateRadio(label,checked,click)
             if option and type(option.SetSelectionIgnored)=="function" then option:SetSelectionIgnored() end
@@ -2023,6 +2573,18 @@ local function AttachThemeMenu(win)
         menu:CreateDivider()
         Checkbox(modeLabel,function() return DB and DB.enabledOnSearch==true end,
             function() SetMonitorEnabled(not (DB and DB.enabledOnSearch==true)) end)
+        Checkbox(autoJoinLabel,ChatAutoJoinOn,function()
+            if type(ForeverQuickJoinDB)~="table" then ForeverQuickJoinDB={} end
+            local enabled=not ChatAutoJoinOn()
+            ForeverQuickJoinDB.chatAutoJoin=enabled
+            if enabled then
+                lfgJoinAttempts=0
+                lfgJoinLastAt=-100000
+                TryAutoJoinLFG(true) -- a direct user click; includes when monitor is off
+            else
+                lfgJoinStatus="disabled in QuickJoin"
+            end
+        end)
         menu:CreateButton(MonitorCopy("help"),function() if ShowIntro then ShowIntro(true) end end)
         menu:CreateDivider()
         menu:CreateTitle(T("Language"))
@@ -2293,7 +2855,10 @@ M.ShowHelp=function() ShowIntro(true) end
 
 local events=CreateFrame("Frame")
 for _,event in ipairs({"PLAYER_LOGIN","LFG_LIST_SEARCH_RESULTS_RECEIVED","LFG_LIST_SEARCH_FAILED",
-    "LFG_LIST_SEARCH_RESULT_UPDATED","WHO_LIST_UPDATE","PLAYER_REGEN_DISABLED","PLAYER_REGEN_ENABLED",
+    "LFG_LIST_SEARCH_RESULT_UPDATED","LFG_LIST_UPDATE_SEARCH_RESULTS",
+    "GROUP_ROSTER_UPDATE","GROUP_JOINED","WHO_LIST_UPDATE",
+    "CHAT_MSG_CHANNEL","CHAT_MSG_SAY","CHAT_MSG_YELL",
+    "PLAYER_REGEN_DISABLED","PLAYER_REGEN_ENABLED",
     "ADDON_ACTION_BLOCKED","ADDON_ACTION_FORBIDDEN"}) do
     events:RegisterEvent(event)
 end
@@ -2307,7 +2872,10 @@ events:SetScript("OnEvent",function(_,event,...)
         end
         if C_Timer and type(C_Timer.NewTicker)=="function" then
             C_Timer.NewTicker(5,function()
-                -- UI freshness only: NEVER trigger a server Search on a timer.
+                -- Read-only cached status: NEVER call restricted server Search().
+                RefreshCachedResults()
+                PruneExpiredChat()
+                if active then TryAutoJoinLFG(false) end
                 if popup and popup:IsShown() then M.RefreshPopup() end
                 UpdateIndicator()
             end)
@@ -2319,24 +2887,44 @@ events:SetScript("OnEvent",function(_,event,...)
     elseif event=="LFG_LIST_SEARCH_FAILED" then
         if active and awaitingResults then
             awaitingResults=false
-            M.Stop()
-            Print("Group Finder search failed. No new listings were verified.")
+            UpdateIndicator()
+            if popup and popup:IsShown() then M.RefreshPopup() end
+            Print("Group Finder search failed. Monitor remains on; click Search to retry.")
         end
     elseif event=="LFG_LIST_SEARCH_RESULT_UPDATED" then
         if active then UpdatedResult((...)) end
+    elseif event=="LFG_LIST_UPDATE_SEARCH_RESULTS" then
+        if active then RefreshCachedResults() end
+    elseif event=="GROUP_ROSTER_UPDATE" or event=="GROUP_JOINED" then
+        if active then
+            local grouped=InGroup()
+            if grouped and (not wasGrouped or event=="GROUP_JOINED") then
+                M.Stop(false)
+                Print("You joined a group. Monitoring stopped.")
+            else
+                wasGrouped=grouped
+            end
+        end
+    elseif event=="CHAT_MSG_CHANNEL" or event=="CHAT_MSG_SAY"
+        or event=="CHAT_MSG_YELL" then
+        ReceiveChat(event,...)
     elseif event=="WHO_LIST_UPDATE" then
         ReceiveWho()
     elseif event=="ADDON_ACTION_BLOCKED" or event=="ADDON_ACTION_FORBIDDEN" then
         local addon,detail=...
         if addon==ADDON and (orbSearchAttempt or (Now()-orbSearchAt<2
             and type(detail)=="string" and detail:find("Search",1,true))) then
-            M.Stop()
-            Print("WoW blocked the orb Search request. Use QuickJoin's native Search button.")
+            awaitingResults=false
+            UpdateIndicator()
+            Print("WoW blocked the orb Search request. Monitor stays on; use QuickJoin's Search button.")
         end
     elseif event=="PLAYER_REGEN_DISABLED" then
         if active and DB and DB.quietCombat and popup then popup:Hide() end
     elseif event=="PLAYER_REGEN_ENABLED" then
-        if active then ShowNext() end
+        if active then
+            TryAutoJoinLFG(false)
+            ShowNext()
+        end
     end
 end)
 
@@ -2363,6 +2951,15 @@ SlashCmdList.FOREVERQUICKJOINMONITOR=function(value)
                 {index=1,name="Demo Leader",class="WARRIOR",className="Warrior",level=35,role="TANK",leader=true},
                 {index=2,name="Example Healer",class="PRIEST",className="Priest",level=34,role="HEALER"},
                 {index=3,name="Example DPS",class="WARLOCK",className="Warlock",level=36,role="DAMAGER"}}})
+    elseif value=="chattest" then
+        SetDB();DB.enabledOnSearch=true;active=true;awaitingResults=false
+        scope={categoryID=nil,activityIDs={},filters={},advanced={},implicit=true}
+        MakePopup();MakeIndicator();UpdateIndicator()
+        Enqueue({key="testchat:"..tostring(Now()),chat=true,synthetic=true,id=nil,
+            chatKind="LFM",chatChannel="LookingForGroup",chatAt=Now(),
+            leader="Demo Recruiter",title="Scarlet Monastery",activity="Scarlet Monastery",
+            chatRoles="HEALER, DPS",comment="LFM SM Cath, need healer and 1 DPS — demo only",
+            roster={}})
     elseif value=="enable" or value=="disable" then
         SetMonitorEnabled(value=="enable")
         Print("Monitor Mode "..(DB.enabledOnSearch and "enabled" or "disabled").." in Settings.")
@@ -2371,8 +2968,15 @@ SlashCmdList.FOREVERQUICKJOINMONITOR=function(value)
     elseif value=="status" or value=="" then
         Print("Active: "..tostring(active).." · pending: "..#pending
             .." · Group Finder verified: "..(verifiedAt and (math.floor(Now()-verifiedAt).."s ago") or "not yet")
-            .." · sources: Group Listings ONLY")
-        Print("Commands: /qjm status, stop, test, help, enable|disable, sound on|off, combat on|off")
+            .." · sources: Group Listings + live LFG Chat"
+            .." · chat matches: "..chatMatched)
+        Print("LookingForGroup auto-join: "..tostring(ChatAutoJoinOn())
+            .." · subscribed: "..tostring(LFGJoined())
+            .." · state: "..lfgJoinStatus)
+        local sentCount=0
+        for _ in pairs(whisperedLeaders) do sentCount=sentCount+1 end
+        Print("Whispered this session: "..sentCount.." players; marked on existing Whisper buttons.")
+        Print("Commands: /qjm status, stop, test, chattest, help, enable|disable, sound on|off, combat on|off")
     else
         Print("Enable Monitor Mode in Settings, choose filters, and click Search.")
     end
