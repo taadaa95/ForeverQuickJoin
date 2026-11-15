@@ -13,6 +13,17 @@ Forever QuickJoin is an enhanced group finder addon built specifically for **WoW
 - **Group Management** — Create listings, manage applicants, and keep recruitment conversations organized.
 - **Blizzard-Inspired Interface** — Familiar visuals, multiple themes, and customizable whisper templates.
 
+Monitor Mode — Find Groups While You Play
+
+Monitor Mode automatically notifies you when matching groups are found, so you can keep playing instead of constantly checking Group Finder or LFG Chat.
+
+- Live LFG Chat Monitoring — Detects recruitment messages from public chat channels.
+- Group Notifications — Displays popups with group details and original chat messages.
+- Smart Prioritization — Ranks Group Finder results based on your role and group composition.
+- One-Click Whisper — Contact players directly, with previously whispered groups automatically marked.
+- Quick Refresh — Left-click the floating icon to search again; right-click to stop.
+- Auto-Join LFG — Optionally joins the LookingForGroup channel.
+
 **How to Open**
  - Type /qj in chat.
  - Press Ctrl + I (default keybind).
