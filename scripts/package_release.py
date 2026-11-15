@@ -56,6 +56,13 @@ def build() -> tuple[Path, Path, str]:
     if parsed.getroot().tag != "Bindings":
         raise SystemExit("Bindings.xml must have a <Bindings> root")
     entries.append(BINDINGS_NAME)
+    # The four native TGA textures must ship in the GitHub/WowUp archive.
+    textures = ROOT / "Textures"
+    required = {"MinimapLogo.tga", "MonitorActive.tga", "MonitorInactive.tga", "OrbGlow.tga"}
+    actual = {p.name for p in textures.glob("*.tga")} if textures.is_dir() else set()
+    if not required.issubset(actual):
+        raise SystemExit(f"Missing Monitor Mode textures: {sorted(required-actual)}")
+    entries.extend(f"Textures/{name}" for name in sorted(required))
 
     output = ROOT / "dist"
     output.mkdir(exist_ok=True)

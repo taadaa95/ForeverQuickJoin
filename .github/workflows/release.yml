@@ -27,7 +27,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y lua5.1
-          luac5.1 -p ForeverQuickJoin.lua ForeverQuickJoin_Host.lua ForeverQuickJoin_Party.lua ForeverQuickJoin_Applications.lua ForeverQuickJoin_Locale.lua ForeverQuickJoin_Theme.lua ForeverQuickJoin_Listing.lua ForeverQuickJoin_Chat.lua tests/*_smoke.lua
+          luac5.1 -p ForeverQuickJoin.lua ForeverQuickJoin_Host.lua ForeverQuickJoin_Party.lua ForeverQuickJoin_Applications.lua ForeverQuickJoin_Locale.lua ForeverQuickJoin_Theme.lua ForeverQuickJoin_Listing.lua ForeverQuickJoin_Chat.lua ForeverQuickJoin_AdvancedFilters.lua ForeverQuickJoin_Monitor.lua tests/*_smoke.lua
           for test in tests/*_smoke.lua; do lua5.1 "$test"; done
 
       - name: Package for WoW Forever and WowUp

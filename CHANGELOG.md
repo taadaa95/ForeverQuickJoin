@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.9 — 2026-11-15
+
+- Integrated **Monitor Mode** directly into Forever QuickJoin. It is off by default for new users, saves its setting per character, and displays a draggable status icon only during an active player-initiated Group Finder search.
+- Added a fully localized **What's New / Help** walkthrough, Settings-menu controls, themed minimap icon, and Group Found popup across all 10 supported interface languages.
+- Added role-aware sorting of Group Listings matches: DPS prioritizes existing Tank/Healer coverage; Tanks prioritize Healers and Healers prioritize Tanks. Within each tier, fuller groups appear first, always after filtering.
+- Each popup's **X** now dismisses just the selected listing and advances to the next; arrows show the current group number and remaining total. Expanded details, member actions, manual Whisper/Invite, and the chosen theme remain available.
+- Added **Already has DPS** and **Healer and/or Tank** Advanced Filters, applied before pagination; conflicting Space for / Already has choices for the same role are disabled and mutually exclusive.
+- Unavailable **Invite** buttons stay labeled Invite (localized) while disabled, rather than showing the fluctuating English **In grp** status.
+- Added a Blizzard queue-entry notification on search start and **LFG Denied** on right-click stop. Sounds respect the SFX channel; the optional 5% gain is requested only on clients that expose per-sound volume override. Other clients keep the native SFX level without altering global sound settings.
+- Monitor Mode never performs unattended server searches, whispers, invitations, or automatic /who queries. Search snapshots expire after five minutes; fresh results require player interaction. README unchanged.
+
 ## 0.9.8 — 2026-11-13
 
 - Added a combined **Theme / Language** dropdown retaining the Forever/Modern theme and transparency controls. UI languages include automatic client detection, English, French, German, Spanish (Spain and Latin America), Brazilian Portuguese, Russian, simplified/traditional Chinese, and Korean. Preferences are saved per character.

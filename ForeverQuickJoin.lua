@@ -1034,7 +1034,8 @@ local function PassesRoleFilters(resultID, info)
     if db.advanced and db.advanced.ignoreTeamComposition == true then return true end
     local filters = db.filters or {}
     local needAny = filters.needTank or filters.needHealer or filters.needDps
-    if not needAny and not filters.hasTank and not filters.hasHealer then
+    if not needAny and not filters.hasTank and not filters.hasHealer
+        and not filters.hasDps and not filters.hasTankOrHealer then
         return true
     end
     local members = Readable(info.numMembers)
@@ -1043,11 +1044,12 @@ local function PassesRoleFilters(resultID, info)
         -- Filtering must not misrepresent unavailable information as a match.
         return false
     end
-    if not needAny and not filters.hasTank and not filters.hasHealer then return true end
     local counts = GetCounts(resultID)
     if not counts then return false end
     if filters.hasTank and counts.TANK < 1 then return false end
     if filters.hasHealer and counts.HEALER < 1 then return false end
+    if filters.hasDps and counts.DAMAGER < 1 then return false end
+    if filters.hasTankOrHealer and counts.TANK < 1 and counts.HEALER < 1 then return false end
     if needAny then
         if members >= maxMembers then return false end
         local targets = ROLE_TARGETS[maxMembers]
@@ -1077,11 +1079,15 @@ local function UpdateAdvancedControls()
     end
     -- Keep saved role filter selections; dim/disable them until opt-out clears.
     local ignore=advanced.ignoreTeamComposition == true
+    local incompatible={needTank="hasTank",needHealer="hasHealer",needDps="hasDps",
+        hasTank="needTank",hasHealer="needHealer",hasDps="needDps"}
     for _,field in ipairs({"needTank","needHealer","needDps","hasTank","hasHealer"}) do
         local button=filterButtons[field]
         if button then
-            button:SetEnabled(not ignore)
-            button:SetAlpha(ignore and 0.45 or 1)
+            local opposite=incompatible[field]
+            local blocked=ignore or (db and db.filters and db.filters[opposite]==true)
+            button:SetEnabled(not blocked)
+            button:SetAlpha(blocked and 0.45 or 1)
         end
     end
     for playstyle, button in pairs(advancedPlaystyleButtons) do
@@ -2537,6 +2543,7 @@ local function CreateWindow()
         UpdatePreview()
     end
     window.QuickJoinUpdateSent = UpdatePages
+    window.QuickJoinApplyRoleFilters = function() RebuildVisibleResults(true) end
     window.QuickJoinStatus = Status
     if ForeverQuickJoinParty and ForeverQuickJoinParty.Attach then
         ForeverQuickJoinParty.Attach(window)
