@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.11 — 2026-11-15
+
+- **Monitor Mode LFG Chat popups:** expanded **Details** now displays the original public chat advertisement in full instead of truncating it to 450 characters or presenting only detected activity and roles.
+- Long chat advertisements use a scrollable message area inside the existing popup, with no extra action buttons. Scroll with the mouse wheel; the usual Group Listings roster scrolling is unchanged.
+- Valid quest links from incoming chat messages remain readable and can use the client's native hyperlink click/hover handling where supported. Unrecognized or malformed markup is safely rendered as text.
+- Structured Group Listings still show their existing group descriptions. Session-long **Whispered** status, monitoring behavior, and existing filters remain unchanged.
+- No Modern dropdown-arrow experiments are included. README unchanged.
+
 ## 0.9.10 — 2026-11-15
 
 - Monitor Mode now remains active until the player joins a group or stops monitoring with a right-click; dismissed groups no longer end monitoring and expired/failed searches do not shut it down.

@@ -1,5 +1,5 @@
 -- Forever QuickJoin Monitor Mode for WoW Forever 1.60.1
--- Integrated with ForeverQuickJoin v0.9.10 (release).
+-- Integrated with ForeverQuickJoin v0.9.11 (release).
 -- Group Listings: new server queries always require a player click.
 -- LFG Chat: live public recruitment posts use activity filters only.
 -- LookingForGroup auto-join uses the native chat API and respects
@@ -37,6 +37,7 @@ local ApplyButtonTheme, ApplyPanelTheme
 local current, selectedName, pendingWho = nil, nil, nil
 local whoZones = {}
 local expanded, rosterOffset, verifiedAt = false, 0, nil
+local chatDetailsFrame, lastChatDetails = nil, nil
 local lastUserSearchAt = 0
 local SEARCH_FRESH_SECONDS = 300
 local INTRO_VERSION = "monitor-mode-7"
@@ -1566,6 +1567,42 @@ local function ChatDisplay(value)
         :gsub("[%c]"," ")
     return value
 end
+-- Render the complete public chat advertisement in the popup. The original
+-- message is stored unchanged in m.comment; formatting is only for display.
+-- WoW Forever may double-escape pipes in quest links, so decode up to three
+-- times and ONLY recreate validated quest links. Everything else is displayed
+-- as readable literal text rather than interpreting arbitrary chat markup.
+local function ValidDetailQuestLink(payload)
+    if type(payload)~="string" or #payload>120 then return false end
+    local id=payload:match("^quest:(%d+)[:%d]*$")
+    return id and #id<=10 and (tonumber(id) or 0)>0 or false
+end
+local function DetailPlain(value)
+    return Clean(ChatDisplay(value)) -- intentionally NO character limit
+end
+local function ChatDetailMarkup(original)
+    local message=Str(original) or ""
+    for _=1,3 do
+        local decoded,n=message:gsub("||","|")
+        message=decoded
+        if n==0 then break end
+    end
+    local out,cursor={},1
+    for _=1,16 do
+        local first,last,payload,label=message:find("|[Hh](quest:[%d:]+)|[hH](.-)|[hH]",cursor)
+        if not first then break end
+        if ValidDetailQuestLink(payload) then
+            out[#out+1]=DetailPlain(message:sub(cursor,first-1))
+            out[#out+1]="|cffffd100|H"..payload.."|h"..DetailPlain(label).."|h|r"
+        else
+            out[#out+1]=DetailPlain(message:sub(cursor,last))
+        end
+        cursor=last+1
+    end
+    if cursor<=#message then out[#out+1]=DetailPlain(message:sub(cursor)) end
+    return table.concat(out)
+end
+
 local function ChatNorm(s)
     s=ChatDisplay(s):lower():gsub("[%p]"," "):gsub("%s+"," ")
     return " "..s.." "
@@ -2108,9 +2145,22 @@ function M.RefreshPopup()
         (active and age and age<SEARCH_FRESH_SECONDS and PopFmt("snapshot",age)) or
         (active and ChatText("hint")) or PopText("refresh"))
     local rawDescription=m and m.comment or PopText("noDesc")
-    if m and m.chat then rawDescription=ChatDisplay(rawDescription) end
-    descriptionText:SetText((m and m.chat and ChatText("details") or PopText("desc"))
-        .."\n"..Clean(rawDescription,m and m.chat and 450 or 280))
+    -- Group Listings retain their existing short description. For public chat,
+    -- show the COMPLETE original post in a dedicated scrollable message frame.
+    -- A chat post can contain quest hyperlinks and exceed 450 characters.
+    if m and m.chat then
+        descriptionText:SetText(ChatText("details"))
+        if chatDetailsFrame and lastChatDetails~=rawDescription then
+            chatDetailsFrame:Clear()
+            local formatted=ChatDetailMarkup(rawDescription)
+            chatDetailsFrame:AddMessage(formatted,1,1,1)
+            chatDetailsFrame:ScrollToTop()
+            lastChatDetails=rawDescription
+        end
+    else
+        descriptionText:SetText(PopText("desc").."\n"..Clean(rawDescription,280))
+        lastChatDetails=nil
+    end
     local chatFresh=m and m.chat and m.chatAt and Now()-m.chatAt<CHAT_TTL
     local listingFresh=m and not m.chat and m.id and verifiedAt
         and Now()-verifiedAt<SEARCH_FRESH_SECONDS and searchIDs[m.id]
@@ -2142,8 +2192,9 @@ function M.RefreshPopup()
     if contextCloseButton then contextCloseButton:SetText(PopText("close")) end
     local details=expanded and m~=nil
     popup:SetHeight(details and (m.chat and 367 or 497) or 159)
-    if details and m.chat then descriptionText:SetHeight(180) else descriptionText:SetHeight(59) end
+    descriptionText:SetHeight(details and m.chat and 18 or 59)
     descriptionText:SetShown(details)
+    if chatDetailsFrame then chatDetailsFrame:SetShown(not not (details and m.chat)) end
     rosterTitle:SetShown(details and not m.chat)
     prevButton:SetShown(details and not m.chat)
     nextButton:SetShown(details and not m.chat)
@@ -2182,6 +2233,46 @@ local function MakePopup()
     queueText:Hide() -- top pager already handles group browsing
     freshnessText=Label(popup,"",12,134,318,18,"GameFontDisableSmall")
     descriptionText=Label(popup,"",12,165,318,59,"GameFontHighlightSmall")
+    -- ScrollingMessageFrame preserves full messages and native clickable quest
+    -- links without inventing a new button or replacing the existing Details UI.
+    chatDetailsFrame=CreateFrame("ScrollingMessageFrame",nil,popup)
+    chatDetailsFrame:SetPoint("TOPLEFT",popup,"TOPLEFT",12,-188)
+    chatDetailsFrame:SetSize(318,162)
+    chatDetailsFrame:SetFont("Fonts\\FRIZQT__.TTF",12,"")
+    chatDetailsFrame:SetFading(false)
+    chatDetailsFrame:SetMaxLines(256)
+    chatDetailsFrame:SetJustifyH("LEFT")
+    if type(chatDetailsFrame.SetHyperlinksEnabled)=="function" then
+        chatDetailsFrame:SetHyperlinksEnabled(true)
+        chatDetailsFrame:SetScript("OnHyperlinkClick",function(self,link,text,button)
+            if not ValidDetailQuestLink(link) then return end
+            if type(SetItemRef)=="function" then
+                local ok=pcall(SetItemRef,link,text,button or "LeftButton")
+                if ok then return end
+            end
+            if type(ChatFrame_OnHyperlinkShow)=="function" then
+                pcall(ChatFrame_OnHyperlinkShow,self,link,text,button or "LeftButton")
+            end
+        end)
+        chatDetailsFrame:SetScript("OnHyperlinkEnter",function(self,link)
+            if not ValidDetailQuestLink(link) or not GameTooltip
+                or type(GameTooltip.SetHyperlink)~="function" then return end
+            GameTooltip:SetOwner(self,"ANCHOR_CURSOR_RIGHT")
+            if pcall(GameTooltip.SetHyperlink,GameTooltip,link) then
+                GameTooltip:Show()
+            else
+                GameTooltip:Hide()
+            end
+        end)
+        chatDetailsFrame:SetScript("OnHyperlinkLeave",function()
+            if GameTooltip then GameTooltip:Hide() end
+        end)
+    end
+    chatDetailsFrame:EnableMouseWheel(true)
+    chatDetailsFrame:SetScript("OnMouseWheel",function(self,delta)
+        if delta>0 then self:ScrollUp() else self:ScrollDown() end
+    end)
+    chatDetailsFrame:Hide()
     rosterTitle=Label(popup,"",12,233,318,21,"GameFontNormalSmall")
     for i=1,ROW_COUNT do
         local tile=CreateFrame("Button",nil,popup,"BackdropTemplate")
@@ -2227,9 +2318,11 @@ local function MakePopup()
     end)
     rosterPager=Label(popup,"",98,468,149,19,"GameFontDisableSmall")
     popup:SetScript("OnMouseWheel",function(_,delta)
-        if expanded then
+        if expanded and current and not current.chat then
             rosterOffset=rosterOffset-(delta>0 and 1 or -1)
             RenderRoster()
+        elseif expanded and current and current.chat and chatDetailsFrame then
+            if delta>0 then chatDetailsFrame:ScrollUp() else chatDetailsFrame:ScrollDown() end
         end
     end)
     popup:EnableMouseWheel(true)
